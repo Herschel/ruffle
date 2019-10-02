@@ -1,0 +1,90 @@
+name: Check
+
+on: [push, pull_request]
+
+jobs:
+  check:
+    name: cargo check
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+
+    - name: Install ALSA dev libraries
+      run: |
+        # Required for cpal crate on Linux
+        sudo apt-get update
+        sudo apt-get -y install libasound2-dev
+
+    - name: Install Rust stable
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+
+    # TODO: We may want to additionally check the wasm32-unknown-unknown target.
+    - name: cargo check
+      uses: actions-rs/cargo@v1
+      # continue-on-error: true  # WARNING: only for this example, remove it!
+      with:
+        command: check
+
+  clippy:
+    name: cargo clippy
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+
+    - name: Install ALSA dev libraries
+      run: |
+        # Required for cpal crate on Linux
+        sudo apt-get update
+        sudo apt-get -y install libasound2-dev
+
+    - name: Install Rust stable
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+
+    - name: Install clippy
+      run: |
+        rustup component add clippy
+
+    - name: cargo clippy
+      uses: actions-rs/cargo@v1
+      # continue-on-error: true  # WARNING: only for this example, remove it!
+      with:
+        command: clippy
+        args: --all --tests -- -D warnings
+
+  fmt:
+    name: cargo fmt
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+
+    - name: Install ALSA dev libraries
+      run: |
+        # Required for cpal crate on Linux
+        sudo apt-get update
+        sudo apt-get -y install libasound2-dev
+
+    - name: Install Rust stable
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+
+    - name: Install rustfmt
+      run: |
+        rustup component add rustfmt
+
+    - name: cargo fmt
+      uses: actions-rs/cargo@v1
+      # continue-on-error: true  # WARNING: only for this example, remove it!
+      with:
+        command: fmt
+        args: --all -- --check
