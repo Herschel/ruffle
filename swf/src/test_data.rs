@@ -1394,7 +1394,7 @@ pub fn tag_tests() -> Vec<TagTestData> {
             ),
         ),
         (
-            1, // Minimum version not listed in SWF19.
+            9, // TODO: Minimum version not listed in SWF19. Version 9?
             Tag::DefineSceneAndFrameLabelData(DefineSceneAndFrameLabelData {
                 scenes: vec![
                     FrameLabelData {
@@ -2007,6 +2007,14 @@ pub fn tag_tests() -> Vec<TagTestData> {
                 TagCode::FrameLabel,
                 0,
             ),
+        ),
+        (
+            5,
+            Tag::FrameLabel(FrameLabel {
+                label: "öÖö".to_string(),
+                is_anchor: false,
+            }),
+            read_tag_bytes_from_file("tests/swfs/FrameLabelANSI.swf", TagCode::FrameLabel),
         ),
         (
             6, // Anchor tags supported in SWF version 6 and later.

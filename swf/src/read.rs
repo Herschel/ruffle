@@ -256,20 +256,6 @@ pub trait SwfRead<R: Read> {
         num.swap(3, 7);
         (&num[..]).read_f64::<LittleEndian>()
     }
-
-    fn read_c_string(&mut self) -> Result<String> {
-        let mut bytes = Vec::new();
-        loop {
-            let byte = self.read_u8()?;
-            if byte == 0 {
-                break;
-            }
-            bytes.push(byte)
-        }
-        // TODO: There is probably a better way to do this.
-        // TODO: Verify ANSI for SWF 5 and earlier.
-        String::from_utf8(bytes).map_err(|_| Error::invalid_data("Invalid string data"))
-    }
 }
 
 pub struct Reader<R: Read> {
@@ -767,6 +753,33 @@ impl<R: Read> Reader<R> {
             }
         }
         Ok(val)
+    }
+
+    fn read_c_string(&mut self) -> Result<String> {
+        let mut bytes = Vec::new();
+        loop {
+            let byte = self.read_u8()?;
+            if byte == 0 {
+                break;
+            }
+            bytes.push(byte)
+        }
+        // SWFv5 and lower use locale-dependent encoding (ANSI or Shift-JIS).
+        // SWFv6 and higher are UTF-8 encoded.
+        // (SWF19 pp. 19-20)
+        let s = if self.version <= 5 {
+            // Decode locale-dependent string to UTF-8.
+            // Currently assuming Windows-1252 (aka ANSI).
+            // TODO: Allow specifying locale.
+            use encoding_rs::*;
+            let (cow, _encoding_used, _had_errors) = WINDOWS_1252.decode(&bytes[..]);
+            cow.into_owned()
+        } else {
+            // TODO: What is Flash's behavior with incorrect UTF-8?
+            // Should we error?
+            String::from_utf8_lossy(&bytes[..]).into_owned()
+        };
+        Ok(s)
     }
 
     pub fn read_character_id(&mut self) -> Result<CharacterId> {
@@ -3125,10 +3138,19 @@ pub mod tests {
             let mut reader = Reader::new(&buf[..], 1);
             assert_eq!(reader.read_c_string().unwrap(), "Testing");
         }
+
+        // Test reading UTF-8.
         {
             let buf = "12🤖12\0".as_bytes();
-            let mut reader = Reader::new(&buf[..], 1);
+            let mut reader = Reader::new(&buf[..], 6);
             assert_eq!(reader.read_c_string().unwrap(), "12🤖12");
+        }
+
+        // Test reading ANSI (SWFv5).
+        {
+            let buf: &[u8] = &[0xfd, 0xfe, 0xff, 0x00];
+            let mut reader = Reader::new(&buf[..], 5);
+            assert_eq!(reader.read_c_string().unwrap(), "ýþÿ");
         }
     }
 

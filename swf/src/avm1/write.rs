@@ -22,6 +22,20 @@ impl<W: Write> Writer<W> {
         Writer { inner, version }
     }
 
+    fn write_c_string(&mut self, s: &str) -> Result<()> {
+        // SWFv5 and lower use locale-dependent encoding (ANSI or Shift-JIS).
+        // SWFv6 and higher are UTF-8 encoded.
+        // (SWF19 pp. 19-20)
+        if self.version <= 5 {
+            use encoding_rs::*;
+            // TODO: What if the text isn't ANSI?
+            let (cow, _encoding_used, _had_errors) = WINDOWS_1252.encode(s);
+            self.get_inner().write_all(&*cow)?;
+        } else {
+            self.get_inner().write_all(s.as_bytes())?;
+        }
+        self.write_u8(0)
+    }
     pub fn write_action(&mut self, action: &Action) -> Result<()> {
         match *action {
             Action::Add => self.write_action_header(OpCode::Add, 0)?,
@@ -205,7 +219,13 @@ impl<W: Write> Writer<W> {
                 let len = values
                     .iter()
                     .map(|v| match *v {
-                        Value::Str(ref string) => string.len() + 2,
+                        Value::Str(ref string) => {
+                            2 + if self.version <= 5 {
+                                string.chars().count()
+                            } else {
+                                string.len()
+                            }
+                        }
                         Value::Null | Value::Undefined => 1,
                         Value::Register(_) | Value::Bool(_) => 2,
                         Value::Double(_) => 9,

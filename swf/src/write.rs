@@ -182,11 +182,6 @@ pub trait SwfWrite<W: Write> {
         num.swap(3, 7);
         self.get_inner().write_all(&num)
     }
-
-    fn write_c_string(&mut self, s: &str) -> io::Result<()> {
-        self.get_inner().write_all(s.as_bytes())?;
-        self.write_u8(0)
-    }
 }
 
 struct Writer<W: Write> {
@@ -241,12 +236,6 @@ impl<W: Write> SwfWrite<W> for Writer<W> {
     fn write_f64(&mut self, n: f64) -> io::Result<()> {
         self.flush_bits()?;
         self.output.write_f64::<LittleEndian>(n)
-    }
-
-    fn write_c_string(&mut self, s: &str) -> io::Result<()> {
-        self.flush_bits()?;
-        self.get_inner().write_all(s.as_bytes())?;
-        self.write_u8(0)
     }
 }
 
@@ -321,6 +310,29 @@ impl<W: Write> Writer<W> {
         Ok(())
     }
 
+    fn write_c_string(&mut self, s: &str) -> io::Result<()> {
+        // SWFv5 and lower use locale-dependent encoding (ANSI or Shift-JIS).
+        // SWFv6 and higher are UTF-8 encoded.
+        // (SWF19 pp. 19-20)
+        if self.version <= 5 {
+            use encoding_rs::*;
+            // TODO: What if the text isn't ANSI?
+            let (cow, _encoding_used, _had_errors) = WINDOWS_1252.encode(s);
+            self.get_inner().write_all(&*cow)?;
+        } else {
+            self.get_inner().write_all(s.as_bytes())?;
+        }
+        self.write_u8(0)
+    }
+
+    fn str_len(&self, s: &str) -> usize {
+        // Return proper string length in bytes.
+        if self.version <= 5 {
+            s.chars().count()
+        } else {
+            s.len()
+        }
+    }
     fn write_rectangle(&mut self, rectangle: &Rectangle) -> Result<()> {
         self.flush_bits()?;
         let num_bits: u8 = [
@@ -1038,7 +1050,7 @@ impl<W: Write> Writer<W> {
             }) => {
                 // TODO: Assert proper version
                 let is_anchor = is_anchor && self.version >= 6;
-                let length = label.len() as u32 + if is_anchor { 2 } else { 1 };
+                let length = self.str_len(label) as u32 + if is_anchor { 2 } else { 1 };
                 self.write_tag_header(TagCode::FrameLabel, length)?;
                 self.write_c_string(label)?;
                 if is_anchor {
@@ -2947,7 +2959,7 @@ mod tests {
             let mut buf = Vec::new();
             {
                 // TODO: What if I use a cursor instead of buf ?
-                let mut writer = Writer::new(&mut buf, 1);
+                let mut writer = Writer::new(&mut buf, 6);
                 writer.write_c_string("Hello!").unwrap();
             }
             assert_eq!(buf, "Hello!\0".bytes().collect::<Vec<_>>());
@@ -2957,7 +2969,7 @@ mod tests {
             let mut buf = Vec::new();
             {
                 // TODO: What if I use a cursor instead of buf ?
-                let mut writer = Writer::new(&mut buf, 1);
+                let mut writer = Writer::new(&mut buf, 6);
                 writer.write_c_string("😀😂!🐼").unwrap();
             }
             assert_eq!(buf, "😀😂!🐼\0".bytes().collect::<Vec<_>>());
