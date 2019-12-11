@@ -4,7 +4,7 @@ use crate::backend::{
 };
 use crate::context::{ActionQueue, RenderContext, UpdateContext};
 use crate::display_object::{MorphShape, MovieClip};
-use crate::events::{ButtonEvent, PlayerEvent};
+use crate::events::{ButtonEvent, EventState, PlayerEvent};
 use crate::library::Library;
 use crate::prelude::*;
 use crate::transform::TransformStack;
@@ -358,25 +358,29 @@ impl<Audio: AudioBackend, Renderer: RenderBackend, Navigator: NavigatorBackend>
         // Check hovered object.
         self.mutate_with_update_context(|avm, context| {
             let root = context.root;
-            let new_hovered = root.mouse_pick(root, (mouse_pos.0, mouse_pos.1));
-            let cur_hovered = context.mouse_hovered_object;
-            if cur_hovered.map(|d| d.as_ptr()) != new_hovered.map(|d| d.as_ptr()) {
-                // RollOut of previous node.
-                if let Some(node) = cur_hovered {
-                    if let Some(mut button) = node.as_button() {
-                        button.handle_button_event(context, ButtonEvent::RollOut);
-                    }
-                }
+            // let new_hovered = root.mouse_pick(root, (mouse_pos.0, mouse_pos.1));
+            // let cur_hovered = context.mouse_hovered_object;
+            // if cur_hovered.map(|d| d.as_ptr()) != new_hovered.map(|d| d.as_ptr()) {
+            //     // RollOut of previous node.
+            //     if let Some(node) = cur_hovered {
+            //         if let Some(mut button) = node.as_button() {
+            //             button.handle_button_event(context, ButtonEvent::RollOut);
+            //         }
+            //     }
 
-                // RollOver on new node.
-                if let Some(node) = new_hovered {
-                    if let Some(mut button) = node.as_button() {
-                        button.handle_button_event(context, ButtonEvent::RollOver);
-                    }
-                }
+            //     // RollOver on new node.
+            //     if let Some(node) = new_hovered {
+            //         if let Some(mut button) = node.as_button() {
+            //             button.handle_button_event(context, ButtonEvent::RollOver);
+            //         }
+            //     }
 
-                context.mouse_hovered_object = new_hovered;
-
+            let event = PlayerEvent::MouseMove {
+                x: mouse_pos.0.to_pixels(),
+                y: mouse_pos.1.to_pixels(),
+            };
+            if root.handle_event(context, &event) == EventState::Handled {
+                //context.mouse_hovered_object = new_hovered;
                 Self::run_actions(avm, context);
                 true
             } else {

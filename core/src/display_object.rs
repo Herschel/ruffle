@@ -1,5 +1,6 @@
 use crate::avm1::{Object, Value};
 use crate::context::{RenderContext, UpdateContext};
+use crate::events::{EventState, PlayerEvent};
 use crate::player::NEWEST_PLAYER_VERSION;
 use crate::prelude::*;
 use crate::transform::Transform;
@@ -293,16 +294,16 @@ pub trait TDisplayObject<'gc>: 'gc + Collect + Debug {
         Value::Undefined // todo: impl for every type and delete this fallback
     }
 
-    fn hit_test(&self, _pos: (Twips, Twips)) -> bool {
-        false
+    fn handle_event(
+        &self,
+        _context: &mut UpdateContext<'_, 'gc, '_>,
+        _event: &PlayerEvent,
+    ) -> EventState {
+        EventState::Unhandled
     }
 
-    fn mouse_pick(
-        &self,
-        _self_node: DisplayObject<'gc>,
-        _pos: (Twips, Twips),
-    ) -> Option<DisplayObject<'gc>> {
-        None
+    fn hit_test(&self, _pos: (Twips, Twips)) -> bool {
+        false
     }
 
     fn post_instantiation(

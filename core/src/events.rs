@@ -28,3 +28,9 @@ pub enum ButtonEvent {
 /// Flash virtual keycode.
 /// TODO: This will eventually move to a separate module.
 pub type KeyCode = u8;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum EventState {
+    Unhandled,
+    Handled,
+}

@@ -1,6 +1,6 @@
 use crate::context::{RenderContext, UpdateContext};
 use crate::display_object::{DisplayObjectBase, TDisplayObject};
-use crate::events::ButtonEvent;
+use crate::events::{ButtonEvent, EventState, PlayerEvent};
 use crate::prelude::*;
 use gc_arena::{Collect, GcCell};
 use std::collections::BTreeMap;
@@ -99,6 +99,37 @@ impl<'gc> TDisplayObject<'gc> for Button<'gc> {
         context.transform_stack.pop();
     }
 
+    fn handle_event(
+        &self,
+        context: &mut UpdateContext<'_, 'gc, '_>,
+        event: &PlayerEvent,
+    ) -> EventState {
+        let cur_state = self.0.read().state;
+        match event {
+            PlayerEvent::MouseMove { x, y } => {
+                let mouse_pos = (Twips::from_pixels(*x), Twips::from_pixels(*y));
+                if self.hit_test(mouse_pos) {
+                    if cur_state == ButtonState::Up {
+                        self.0.write(context.gc_context).set_state(
+                            (*self).into(),
+                            context,
+                            ButtonState::Over,
+                        );
+                    }
+                    return EventState::Handled;
+                }
+                if cur_state != ButtonState::Up {
+                    self.0.write(context.gc_context).set_state(
+                        (*self).into(),
+                        context,
+                        ButtonState::Up,
+                    );
+                }
+                EventState::Unhandled
+            }
+            _ => EventState::Unhandled,
+        }
+    }
     fn hit_test(&self, point: (Twips, Twips)) -> bool {
         for child in self.0.read().hit_area.values().rev() {
             if child.world_bounds().contains(point) {
@@ -107,19 +138,6 @@ impl<'gc> TDisplayObject<'gc> for Button<'gc> {
         }
 
         false
-    }
-
-    fn mouse_pick(
-        &self,
-        self_node: DisplayObject<'gc>,
-        point: (Twips, Twips),
-    ) -> Option<DisplayObject<'gc>> {
-        // The button is hovered if the mouse is over any child nodes.
-        if self.hit_test(point) {
-            Some(self_node)
-        } else {
-            None
-        }
     }
 
     fn as_button(&self) -> Option<Self> {

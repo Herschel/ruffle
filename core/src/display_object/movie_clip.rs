@@ -7,6 +7,7 @@ use crate::context::{RenderContext, UpdateContext};
 use crate::display_object::{
     Bitmap, Button, DisplayObjectBase, EditText, Graphic, MorphShapeStatic, TDisplayObject, Text,
 };
+use crate::events::{EventState, PlayerEvent};
 use crate::font::Font;
 use crate::matrix::Matrix;
 use crate::prelude::*;
@@ -256,19 +257,28 @@ impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
         context.transform_stack.pop();
     }
 
-    fn mouse_pick(
+    fn handle_event(
         &self,
-        _self_node: DisplayObject<'gc>,
-        point: (Twips, Twips),
-    ) -> Option<DisplayObject<'gc>> {
+        context: &mut UpdateContext<'_, 'gc, '_>,
+        event: &PlayerEvent,
+    ) -> EventState {
         for child in self.0.read().children.values().rev() {
-            let result = child.mouse_pick(*child, point);
-            if result.is_some() {
-                return result;
+            if child.handle_event(context, event) == EventState::Handled {
+                return EventState::Handled;
             }
         }
 
-        None
+        EventState::Unhandled
+    }
+
+    fn hit_test(&self, point: (Twips, Twips)) -> bool {
+        for child in self.0.read().children.values() {
+            if child.hit_test(point) {
+                return true;
+            }
+        }
+
+        false
     }
 
     fn as_movie_clip(&self) -> Option<MovieClip<'gc>> {
