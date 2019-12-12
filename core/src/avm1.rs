@@ -1025,7 +1025,6 @@ impl<'gc> Avm1<'gc> {
         let name_val = self.pop()?;
         let name = name_val.coerce_to_string(self, context)?;
         let object = self.pop()?.as_object()?;
-        log::info!("THIS: {:?}", object.as_display_object());
         object.get(&name, self, context)?.push(self);
 
         Ok(())

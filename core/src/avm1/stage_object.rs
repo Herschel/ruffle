@@ -495,38 +495,38 @@ fn set_visible<'gc>(
 fn width<'gc>(
     _avm: &mut Avm1<'gc>,
     _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
+    this: DisplayObject<'gc>,
 ) -> Result<Value<'gc>, Error> {
-    log::warn!("Unimplemented property _width");
-    Ok(1.into())
+    Ok(this.width().into())
 }
 
 fn set_width<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
-    _val: Value<'gc>,
+    avm: &mut Avm1<'gc>,
+    context: &mut UpdateContext<'_, 'gc, '_>,
+    mut this: DisplayObject<'gc>,
+    val: Value<'gc>,
 ) -> Result<(), Error> {
-    log::warn!("Unimplemented property _width");
+    let val = val.as_number(avm, context)?;
+    this.set_width(context.gc_context, val);
     Ok(())
 }
 
 fn height<'gc>(
     _avm: &mut Avm1<'gc>,
     _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
+    this: DisplayObject<'gc>,
 ) -> Result<Value<'gc>, Error> {
-    log::warn!("Unimplemented property _height");
-    Ok(1.into())
+    Ok(this.height().into())
 }
 
 fn set_height<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
-    _val: Value<'gc>,
+    avm: &mut Avm1<'gc>,
+    context: &mut UpdateContext<'_, 'gc, '_>,
+    mut this: DisplayObject<'gc>,
+    val: Value<'gc>,
 ) -> Result<(), Error> {
-    log::warn!("Unimplemented property _height");
+    let val = val.as_number(avm, context)? / 100.0;
+    this.set_height(context.gc_context, val);
     Ok(())
 }
 

@@ -38,7 +38,7 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
         self.0.read().static_data.id
     }
 
-    fn local_bounds(&self) -> BoundingBox {
+    fn self_bounds(&self) -> BoundingBox {
         self.0.read().static_data.bounds.clone()
     }
 

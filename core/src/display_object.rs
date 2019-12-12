@@ -38,7 +38,6 @@ pub struct DisplayObjectBase<'gc> {
     // These are expensive to calculate, so they will be calculated and cached when AS requests
     // one of these properties.
     rotation: f64,
-    rotation_y: f64,
     scale_x: f64,
     scale_y: f64,
     skew: f64,
@@ -67,7 +66,6 @@ impl<'gc> Default for DisplayObjectBase<'gc> {
             name: Default::default(),
             clip_depth: Default::default(),
             rotation: 0.0,
-            rotation_y: 0.0,
             scale_x: 1.0,
             scale_y: 1.0,
             skew: 0.0,
@@ -155,12 +153,26 @@ impl<'gc> DisplayObjectBase<'gc> {
             let scale_x = f32::sqrt(a * a + b * b);
             let scale_y = f32::sqrt(c * c + d * d);
             self.rotation = rotation_x.into();
-            self.rotation_y = rotation_y.into();
             self.scale_x = scale_x.into();
             self.scale_y = scale_y.into();
             self.skew = (rotation_y - rotation_x).into();
             self.flags.insert(DisplayObjectFlags::ScaleRotationCached);
         }
+    }
+
+    fn set_scale(&mut self, scale_x: f32, scale_y: f32, rotation: f32) {
+        self.cache_scale_rotation();
+        let mut matrix = &mut self.transform.matrix;
+        let rotation = rotation.to_radians();
+        let cos_x = f32::cos(rotation);
+        let sin_x = f32::sin(rotation);
+        self.scale_x = scale_x.into();
+        self.scale_y = scale_y.into();
+        self.rotation = rotation.into();
+        matrix.a = (scale_x * cos_x) as f32;
+        matrix.b = (scale_x * sin_x) as f32;
+        matrix.c = (scale_y * -sin_x) as f32;
+        matrix.d = (scale_y * cos_x) as f32;
     }
 
     fn rotation(&mut self) -> f32 {
@@ -207,8 +219,6 @@ impl<'gc> DisplayObjectBase<'gc> {
     fn set_scale_y(&mut self, value: f32) {
         self.cache_scale_rotation();
         self.scale_y = value.into();
-        //let cos = f64::cos(self.rotation + self.skew);
-        //let sin = f64::sin(self.rotation + self.skew);
         let cos = f64::cos(self.rotation + self.skew);
         let sin = f64::sin(self.rotation + self.skew);
         let mut matrix = &mut self.transform.matrix;
@@ -318,12 +328,25 @@ impl<'gc> DisplayObjectBase<'gc> {
 pub trait TDisplayObject<'gc>: 'gc + Collect + Debug {
     fn id(&self) -> CharacterId;
     fn depth(&self) -> Depth;
+    fn self_bounds(&self) -> BoundingBox {
+        let mut bounds: BoundingBox = Default::default();
+        for child in self.children() {
+            bounds.union(&child.local_bounds());
+        }
+        bounds
+    }
     fn local_bounds(&self) -> BoundingBox {
-        BoundingBox::default()
+        self.self_bounds().transform(&*self.matrix())
     }
 
     fn world_bounds(&self) -> BoundingBox {
-        BoundingBox::default()
+        let mut bounds = self.local_bounds();
+        let mut node = self.parent();
+        while let Some(display_object) = node {
+            bounds = bounds.transform(&*display_object.matrix());
+            node = display_object.parent();
+        }
+        bounds
     }
     fn place_frame(&self) -> u16;
     fn set_place_frame(&mut self, context: MutationContext<'gc, '_>, frame: u16);
@@ -350,21 +373,49 @@ pub trait TDisplayObject<'gc>: 'gc + Collect + Debug {
     fn set_scale_x(&mut self, gc_context: MutationContext<'gc, '_>, value: f32);
     fn scale_y(&mut self, gc_context: MutationContext<'gc, '_>) -> f32;
     fn set_scale_y(&mut self, gc_context: MutationContext<'gc, '_>, value: f32);
-    fn width(&mut self) -> f64 {
-        let bounds = self.world_bounds();
+    fn set_scale(
+        &mut self,
+        gc_context: MutationContext<'gc, '_>,
+        scale_x: f32,
+        scale_y: f32,
+        rotation: f32,
+    );
+    fn width(&self) -> f64 {
+        let bounds = self.local_bounds();
         (bounds.x_max - bounds.x_min).to_pixels()
     }
     fn set_width(&mut self, gc_context: MutationContext<'gc, '_>, value: f64) {
+        let rotation = self.rotation(gc_context);
         let prev_width = self.width();
         let scale = if prev_width != 0.0 {
             value / prev_width
         } else {
             0.0
         };
-        self.set_scale_x(gc_context, scale as f32);
+        let prev_scale = self.scale_x(gc_context);
+        let scale_y =
+            f32::sqrt(self.matrix().c * self.matrix().c + self.matrix().d * self.matrix().d);
+        self.set_scale(gc_context, prev_scale * scale as f32, scale_y, rotation);
+        // self.cache_scale_rotation();
+        // let prev_width = self.width();
+        // let scale = if prev_width != 0.0 {
+        //     value / prev_width
+        // } else {
+        //     0.0
+        // };
+        // let prev_scale = self.scale_x(gc_context);
+        // let scale_x = prev_scale * scale;
+        // let scale_y = self.scale_y;
+        // let cos = f64::cos(self.rotation());
+        // let sin = f64::sin(self.rotation());
+        // let matrix = self.matrix_mut();
+        // matrix.a = scale_x * cos;
+        // matrix.b = scale_x * sin;
+        // matrix.c = scale_y * -sin;
+        // matrix.d = scale_y * cos;
     }
-    fn height(&mut self) -> f64 {
-        let bounds = self.world_bounds();
+    fn height(&self) -> f64 {
+        let bounds = self.local_bounds();
         (bounds.y_max - bounds.y_min).to_pixels()
     }
     fn set_height(&mut self, gc_context: MutationContext<'gc, '_>, value: f64) {
@@ -374,7 +425,8 @@ pub trait TDisplayObject<'gc>: 'gc + Collect + Debug {
         } else {
             0.0
         };
-        self.set_scale_y(gc_context, scale as f32);
+        let prev_scale = self.scale_y(gc_context);
+        self.set_scale_y(gc_context, prev_scale * scale as f32);
     }
     fn alpha(&self) -> f32;
     fn set_alpha(&self, gc_context: MutationContext<'gc, '_>, value: f32);
@@ -585,6 +637,9 @@ macro_rules! impl_display_object {
         }
         fn set_scale_y(&mut self, gc_context: gc_arena::MutationContext<'gc, '_>, value: f32) {
             self.0.write(gc_context).$field.set_scale_y(value)
+        }
+        fn set_scale(&mut self, gc_context: gc_arena::MutationContext<'gc, '_>, scale_x: f32, scale_y: f32, rotation: f32) {
+            self.0.write(gc_context).$field.set_scale(scale_x, scale_y, rotation)
         }
         fn alpha(&self) -> f32 {
             self.0.read().$field.alpha()
