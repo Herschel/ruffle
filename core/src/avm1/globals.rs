@@ -18,6 +18,7 @@ pub(crate) mod movie_clip;
 mod object;
 mod sound;
 mod stage;
+mod string;
 pub(crate) mod text_field;
 
 #[allow(non_snake_case, unused_must_use)] //can't use errors yet
@@ -163,6 +164,8 @@ pub fn create_globals<'gc>(
     let movie_clip_proto: Object<'gc> =
         movie_clip::create_proto(gc_context, object_proto, function_proto);
 
+    let string_proto: Object<'gc> = string::create_proto(gc_context, object_proto, function_proto);
+
     let sound_proto: Object<'gc> = sound::create_proto(gc_context, object_proto, function_proto);
 
     let text_field_proto: Object<'gc> =
@@ -196,6 +199,12 @@ pub fn create_globals<'gc>(
         Some(function_proto),
         Some(sound_proto),
     );
+    let string = ScriptObject::function(
+        gc_context,
+        Executable::Native(string::constructor),
+        Some(function_proto),
+        Some(string_proto),
+    );
     let text_field = ScriptObject::function(
         gc_context,
         Executable::Native(text_field::constructor),
@@ -217,6 +226,7 @@ pub fn create_globals<'gc>(
     globals.define_value(gc_context, "Function", function.into(), EnumSet::empty());
     globals.define_value(gc_context, "MovieClip", movie_clip.into(), EnumSet::empty());
     globals.define_value(gc_context, "Sound", sound.into(), EnumSet::empty());
+    globals.define_value(gc_context, "String", string.into(), EnumSet::empty());
     globals.define_value(gc_context, "TextField", text_field.into(), EnumSet::empty());
     globals.force_set_function(
         "Number",
