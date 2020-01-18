@@ -394,6 +394,41 @@ impl<'gc> Value<'gc> {
         }
     }
 
+    /// Coerece a value to `u16`, matching the ECMAScript `ToUInt16` behavior.
+    /// Numbers will be wrapped in the range [0, 2^16).
+    /// Objects will call `valueOf`.
+    pub fn coerce_to_u16(
+        &self,
+        avm: &mut Avm1<'gc>,
+        context: &mut UpdateContext<'_, 'gc, '_>,
+    ) -> Result<u16, Error> {
+        self.as_number(avm, context).map(f64_to_wrapping_u16)
+    }
+
+    /// Coerece a value to `i32`, matching the ECMAScript `ToInt32` behavior.
+    /// This is used by most ActionScript methods that take an integer parameter.
+    /// Numbers will be wrapped in the range [-2^31, 2^31).
+    /// Objects will call `valueOf`.
+    pub fn coerce_to_i32(
+        &self,
+        avm: &mut Avm1<'gc>,
+        context: &mut UpdateContext<'_, 'gc, '_>,
+    ) -> Result<i32, Error> {
+        self.as_number(avm, context).map(f64_to_wrapping_i32)
+    }
+
+    /// Coerece a value to `i32`, matching the ECMAScript `ToUInt32` behavior.
+    /// Numbers will be wrapped in the range [0, 2^32).
+    /// Objects will call `valueOf`.
+    #[allow(dead_code)]
+    pub fn coerce_to_u32(
+        &self,
+        avm: &mut Avm1<'gc>,
+        context: &mut UpdateContext<'_, 'gc, '_>,
+    ) -> Result<u32, Error> {
+        self.as_number(avm, context).map(f64_to_wrapping_u32)
+    }
+
     /// Coerce a value to a string.
     pub fn coerce_to_string(
         self,
@@ -709,4 +744,35 @@ mod test {
             assert_eq!(b.abstract_lt(a, avm, context).unwrap(), Value::Bool(false))
         })
     }
+}
+
+/// Converts an `f64` to an `u16` with ECMAScript `ToUInt16` wrapping behavior.
+/// The returned value will be in the range [0, 2^16).
+pub fn f64_to_wrapping_u16(n: f64) -> u16 {
+    if n.is_nan() || n.is_infinite() {
+        0
+    } else if n >= 0.0 {
+        (n % 65536.0) as u16
+    } else {
+        ((n % 65536.0) + 65536.0) as u16
+    }
+}
+
+/// Converts an `f64` to an `u32` with ECMAScript `ToUInt32` wrapping behavior.
+/// The returned value will be in the range [0, 2^32).
+#[allow(clippy::unreadable_literal)]
+pub fn f64_to_wrapping_u32(n: f64) -> u32 {
+    if n.is_nan() || n.is_infinite() {
+        0
+    } else if n >= 0.0 {
+        (n % 4294967296.0) as u32
+    } else {
+        ((n % 4294967296.0) + 4294967296.0) as u32
+    }
+}
+
+/// Converts an `f64` to an `i32` with ECMAScript `ToUInt32` wrapping behavior.
+/// The returned value will be in the range [-2^31, 2^31).
+pub fn f64_to_wrapping_i32(n: f64) -> i32 {
+    f64_to_wrapping_u32(n) as i32
 }
