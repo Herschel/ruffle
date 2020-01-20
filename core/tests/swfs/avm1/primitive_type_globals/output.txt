@@ -1,0 +1,155 @@
+// Number()
+number
+0
+
+// Number(1)
+number
+1
+
+// new Number("-101")
+object
+-101
+
+// n.valueOf()
+5
+
+// n.toString()
+5
+
+// n.toString(i)
+base 0: -123.1
+base 1: -123.1
+base 2: -1111011
+base 3: -11120
+base 4: -1323
+base 5: -443
+base 6: -323
+base 7: -234
+base 8: -173
+base 9: -146
+base 10: -123.1
+base 11: -102
+base 12: -a3
+base 13: -96
+base 14: -8b
+base 15: -83
+base 16: -7b
+base 17: -74
+base 18: -6f
+base 19: -69
+base 20: -63
+base 21: -5i
+base 22: -5d
+base 23: -58
+base 24: -53
+base 25: -4n
+base 26: -4j
+base 27: -4f
+base 28: -4b
+base 29: -47
+base 30: -43
+base 31: -3u
+base 32: -3r
+base 33: -3o
+base 34: -3l
+base 35: -3i
+base 36: -3f
+base 37: -123.1
+
+// NaN.toString(i)
+base 0: NaN
+base 1: NaN
+base 2: -/0000000000000000000000000000000
+base 3: -/.//./..././/0.0./0.
+base 4: -.000000000000000
+base 5: -/--,,..-,-,0,-
+base 6: -++-0-.00++-.
+base 7: -/0,/-,.///*.
+base 8: -.0000000000
+base 9: -+,)())-*).
+base 10: NaN
+base 11: -&0...0.(.
+base 12: -,%%.-0(&(
+base 13: -.(.%&,&&%
+base 14: -/*+.$&'-.
+base 15: -$()"**%(
+base 16: -(0000000
+base 17: -+- )!+,'
+base 18: --'.( -.
+base 19: -.)$+)--
+base 20: -/#%/!'.(
+base 21: -/,0.#'.
+base 22: -!+%!.
+base 23: -"%"!'*
+base 24: -%+  "+(
+base 25: -(#
+base 26: -*(
+base 27: -+"$%
+base 28: -,$'( 
+base 29: --)'((
+base 30: -.%*$(
+base 31: -.#0'$.
+base 32: -.000000
+base 33: -/.
+base 34: -/#(
+base 35: -/+..
+base 36: -
+0
+
+base 37: NaN
+
+// Number.NaN
+NaN
+
+// Number.POSITIVE_INFINITY
+Infinity
+
+// Number.NEGATIVE_INFINITY
+-Infinity
+
+// Number.MIN_VALUE
+4.94065645841247e-324
+
+// Number.MAX_VALUE
+1.79769313486231e+308
+
+// Boolean()
+undefined
+undefined
+
+// Boolean(false)
+false
+boolean
+
+// Boolean("asd")
+true
+boolean
+
+// new Boolean(1)
+true
+object
+
+// b.toString()
+true
+
+// b.valueOf()
+true
+
+// String()
+undefined
+undefined
+
+// String("foo")
+true
+boolean
+
+// new String("333")
+333
+object
+
+// b.toString()
+test
+
+// s.valueOf()
+test2
+
