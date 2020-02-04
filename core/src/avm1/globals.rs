@@ -105,6 +105,75 @@ pub fn get_nan<'gc>(
     }
 }
 
+pub fn set_interval<'gc>(
+    avm: &mut Avm1<'gc>,
+    context: &mut UpdateContext<'_, 'gc, '_>,
+    _this: Object<'gc>,
+    args: &[Value<'gc>],
+) -> Result<ReturnValue<'gc>, Error> {
+    if avm.current_swf_version() >= 6 {
+        let object = match args.get(0) {
+            Some(Value::Object(o)) => o,
+            _ => return Ok(Value::Undefined.into()),
+        };
+
+        if let Some(e) = object.as_executable() {
+            let interval = args
+                .get(1)
+                .cloned()
+                .unwrap_or(Value::Undefined)
+                .coerce_to_i32(avm, context)?;
+
+            let params = &args[2..];
+            return Ok(Value::Undefined.into());
+        } else {
+            // Object + method name.
+            let method_name = args
+                .get(1)
+                .cloned()
+                .unwrap_or(Value::Undefined)
+                .coerce_to_string(avm, context)?;
+
+            let interval = args
+                .get(2)
+                .cloned()
+                .unwrap_or(Value::Undefined)
+                .coerce_to_i32(avm, context)?;
+
+            let params = &args[3..];
+
+            return Ok(Value::Undefined.into());
+        }
+    } else {
+        Ok(Value::Undefined.into())
+    }
+}
+
+pub fn set_timeout<'gc>(
+    avm: &mut Avm1<'gc>,
+    context: &mut UpdateContext<'_, 'gc, '_>,
+    _this: Object<'gc>,
+    args: &[Value<'gc>],
+) -> Result<ReturnValue<'gc>, Error> {
+    Ok(Value::Undefined.into())
+}
+
+pub fn clear_interval<'gc>(
+    avm: &mut Avm1<'gc>,
+    context: &mut UpdateContext<'_, 'gc, '_>,
+    _this: Object<'gc>,
+    args: &[Value<'gc>],
+) -> Result<ReturnValue<'gc>, Error> {
+    if avm.current_swf_version() >= 6 {
+        let id = args
+            .get(0)
+            .cloned()
+            .unwrap_or(Value::Undefined)
+            .coerce_to_i32(avm, context)?;
+    }
+    Ok(Value::Undefined.into())
+}
+
 /// This structure represents all system builtins that are used regardless of
 /// whatever the hell happens to `_global`. These are, of course,
 /// user-modifiable.
@@ -297,6 +366,27 @@ pub fn create_globals<'gc>(
     globals.force_set_function(
         "getURL",
         getURL,
+        gc_context,
+        EnumSet::empty(),
+        Some(function_proto),
+    );
+    globals.force_set_function(
+        "setInterval",
+        set_interval,
+        gc_context,
+        EnumSet::empty(),
+        Some(function_proto),
+    );
+    globals.force_set_function(
+        "setTimeout",
+        set_timeout,
+        gc_context,
+        EnumSet::empty(),
+        Some(function_proto),
+    );
+    globals.force_set_function(
+        "clearInterval",
+        clear_interval,
         gc_context,
         EnumSet::empty(),
         Some(function_proto),
