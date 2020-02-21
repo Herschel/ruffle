@@ -11,6 +11,7 @@ use ruffle_core::backend::render::swf::{self, FillStyle};
 use ruffle_core::backend::render::{
     BitmapHandle, BitmapInfo, Color, Letterbox, RenderBackend, ShapeHandle, Transform,
 };
+use ruffle_core::bounding_box::BoundingBox;
 use ruffle_core::shape_utils::{DrawCommand, DrawPath};
 use std::convert::TryInto;
 use swf::Twips;
@@ -898,7 +899,7 @@ impl RenderBackend for GliumRenderBackend {
         }
     }
 
-    fn push_mask(&mut self) {
+    fn push_mask(&mut self, _bounds: &BoundingBox) {
         // Desktop draws the masker to the stencil buffer, one bit per mask.
         // Masks-within-masks are handled as a bitmask.
         // This does unfortunately mean we are limited in the number of masks at once (usually 8 bits).

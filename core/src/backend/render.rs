@@ -1,4 +1,4 @@
-pub use crate::{transform::Transform, Color};
+pub use crate::{bounding_box::BoundingBox, transform::Transform, Color};
 use std::io::Read;
 pub use swf;
 
@@ -28,7 +28,7 @@ pub trait RenderBackend {
     fn end_frame(&mut self);
     fn draw_pause_overlay(&mut self);
     fn draw_letterbox(&mut self, letterbox: Letterbox);
-    fn push_mask(&mut self);
+    fn push_mask(&mut self, bounds: &BoundingBox);
     fn activate_mask(&mut self);
     fn pop_mask(&mut self);
 }
@@ -121,7 +121,7 @@ impl RenderBackend for NullRenderer {
     fn render_shape(&mut self, _shape: ShapeHandle, _transform: &Transform) {}
     fn draw_pause_overlay(&mut self) {}
     fn draw_letterbox(&mut self, _letterbox: Letterbox) {}
-    fn push_mask(&mut self) {}
+    fn push_mask(&mut self, _bounds: &BoundingBox) {}
     fn activate_mask(&mut self) {}
     fn pop_mask(&mut self) {}
 }

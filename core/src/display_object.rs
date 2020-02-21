@@ -991,7 +991,7 @@ pub fn render_children<'gc>(
             // Push and render the mask.
             clip_depth_stack.push(clip_depth);
             clip_depth = child.clip_depth();
-            context.renderer.push_mask();
+            context.renderer.push_mask(&child.world_bounds());
             child.render(context);
             context.renderer.activate_mask();
         } else if child.visible() {

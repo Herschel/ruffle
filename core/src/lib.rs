@@ -7,7 +7,7 @@ mod display_object;
 extern crate smallvec;
 
 mod avm1;
-mod bounding_box;
+pub mod bounding_box;
 mod character;
 pub mod color_transform;
 mod context;
