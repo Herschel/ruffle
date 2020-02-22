@@ -1,7 +1,7 @@
 use crate::utils::JsResult;
 use ruffle_core::backend::render::{
-    swf, swf::CharacterId, BitmapHandle, BitmapInfo, Color, Letterbox, RenderBackend, ShapeHandle,
-    Transform,
+    swf, swf::CharacterId, swf::Twips, BitmapHandle, BitmapInfo, Color, Letterbox, RenderBackend,
+    ShapeHandle, Transform,
 };
 use ruffle_core::bounding_box::BoundingBox;
 use ruffle_core::color_transform::ColorTransform;
@@ -18,7 +18,7 @@ pub struct WebCanvasRenderBackend {
     canvas: HtmlCanvasElement,
     context: CanvasRenderingContext2d,
     root_canvas: HtmlCanvasElement,
-    render_targets: Vec<(HtmlCanvasElement, CanvasRenderingContext2d)>,
+    render_targets: Vec<RenderTarget>,
     cur_render_target: usize,
     color_matrix: Element,
     shapes: Vec<ShapeData>,
@@ -196,7 +196,11 @@ impl WebCanvasRenderBackend {
             .map(|s| s.contains("Firefox"))
             .unwrap_or(false);
 
-        let render_targets = vec![(canvas.clone(), context.clone())];
+        let render_targets = vec![RenderTarget {
+            canvas: canvas.clone(),
+            context: context.clone(),
+            bounds: Default::default(),
+        }];
         let renderer = Self {
             canvas: canvas.clone(),
             root_canvas: canvas.clone(),
@@ -245,7 +249,7 @@ impl WebCanvasRenderBackend {
     }
 
     // Pushes a fresh canvas onto the stack to use as a render target.
-    fn push_render_target(&mut self) {
+    fn push_render_target(&mut self, bounds: &BoundingBox) {
         self.cur_render_target += 1;
         if self.cur_render_target >= self.render_targets.len() {
             // Create offscreen canvas to use as the render target.
@@ -267,31 +271,41 @@ impl WebCanvasRenderBackend {
                 .set_property("display", "none")
                 .warn_on_error();
             self.root_canvas.append_child(&canvas).warn_on_error();
-            self.render_targets.push((canvas, context));
+            self.render_targets.push(RenderTarget {
+                canvas,
+                context,
+                bounds: bounds.clone(),
+            });
         }
 
-        let (canvas, context) = &self.render_targets[self.cur_render_target];
+        let render_target = &self.render_targets[self.cur_render_target];
+        let canvas = render_target.canvas.clone();
+        let context = render_target.context.clone();
         canvas.set_width(self.viewport_width);
         canvas.set_height(self.viewport_height);
-        self.canvas = canvas.clone();
-        self.context = context.clone();
+        self.canvas = canvas;
+        self.context = context;
         let width = self.canvas.width();
         let height = self.canvas.height();
-        self.context
-            .clear_rect(0.0, 0.0, width.into(), height.into());
+        self.context.clear_rect(
+            0.0,
+            0.0,
+            (bounds.x_max - bounds.x_min).to_pixels(),
+            (bounds.y_max - bounds.y_min).to_pixels(),
+        );
     }
 
-    fn pop_render_target(&mut self) -> (HtmlCanvasElement, CanvasRenderingContext2d) {
+    fn pop_render_target(&mut self) -> RenderTarget {
         if self.cur_render_target > 0 {
-            let out = (self.canvas.clone(), self.context.clone());
+            let out_render_target = &self.render_targets[self.cur_render_target];
             self.cur_render_target -= 1;
-            let (canvas, context) = &self.render_targets[self.cur_render_target];
-            self.canvas = canvas.clone();
-            self.context = context.clone();
-            out
+            let render_target = &self.render_targets[self.cur_render_target];
+            self.canvas = render_target.canvas.clone();
+            self.context = render_target.context.clone();
+            out_render_target.clone()
         } else {
             log::error!("Render target stack underflow");
-            (self.canvas.clone(), self.context.clone())
+            panic!()
         }
     }
 
@@ -299,15 +313,16 @@ impl WebCanvasRenderBackend {
     #[inline]
     fn set_transform(&mut self, transform: &Transform) {
         let matrix = transform.matrix;
-
+        let bounds_x = self.render_targets[self.cur_render_target].bounds.x_min;
+        let bounds_y = self.render_targets[self.cur_render_target].bounds.y_min;
         self.context
             .set_transform(
                 matrix.a.into(),
                 matrix.b.into(),
                 matrix.c.into(),
                 matrix.d.into(),
-                f64::from(matrix.tx) / 20.0,
-                f64::from(matrix.ty) / 20.0,
+                f64::from(matrix.tx - bounds_x.get() as f32) / 20.0,
+                f64::from(matrix.ty - bounds_y.get() as f32) / 20.0,
             )
             .unwrap();
     }
@@ -654,27 +669,33 @@ impl RenderBackend for WebCanvasRenderBackend {
         }
     }
 
-    fn push_mask(&mut self, _bounds: &BoundingBox) {
+    fn push_mask(&mut self, bounds: &BoundingBox) {
         // In the canvas backend, masks are implemented using two render targets.
         // We render the masker clips to the first render target.
-        self.push_render_target();
+        self.push_render_target(bounds);
     }
     fn activate_mask(&mut self) {
         // We render the maskee clips to the second render target.
-        self.push_render_target();
+        let render_target = &self.render_targets[self.cur_render_target];
+        let bounds = render_target.bounds.clone();
+        self.push_render_target(&bounds);
     }
     fn pop_mask(&mut self) {
-        let (maskee_canvas, maskee_context) = self.pop_render_target();
-        let (masker_canvas, _masker_context) = self.pop_render_target();
+        let maskee = self.pop_render_target();
+        let masker = self.pop_render_target();
+
+        let bounds_width = (masker.bounds.x_max - masker.bounds.x_min).to_pixels();
+        let bounds_height = (masker.bounds.x_max - masker.bounds.y_min).to_pixels();
 
         // We have to be sure to reset the transforms here so that
         // the texture is drawn starting from the upper-left corner.
-        maskee_context.reset_transform().warn_on_error();
+        maskee.context.reset_transform().warn_on_error();
         self.context.reset_transform().warn_on_error();
 
         // We draw the masker onto the maskee using the "destination-in" blend mode.
         // This will filter out pixels where the maskee alpha == 0.
-        maskee_context
+        maskee
+            .context
             .set_global_composite_operation("destination-in")
             .unwrap();
 
@@ -688,19 +709,41 @@ impl RenderBackend for WebCanvasRenderBackend {
             )
             .warn_on_error();
 
-        maskee_context.set_filter("url('#_cm')");
-        maskee_context
-            .draw_image_with_html_canvas_element(&masker_canvas, 0.0, 0.0)
+        maskee.context.set_filter("url('#_cm')");
+        maskee
+            .context
+            .draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
+                &masker.canvas,
+                0.0,
+                0.0,
+                bounds_width,
+                bounds_height,
+                0.0,
+                0.0,
+                bounds_width,
+                bounds_height,
+            )
             .unwrap();
-        maskee_context
+        maskee
+            .context
             .set_global_composite_operation("source-over")
             .unwrap();
-        maskee_context.set_filter("none");
+        maskee.context.set_filter("none");
 
         // Finally, we draw the finalized masked onto the main canvas.
         self.context.reset_transform().warn_on_error();
         self.context
-            .draw_image_with_html_canvas_element(&maskee_canvas, 0.0, 0.0)
+            .draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
+                &maskee.canvas,
+                0.0,
+                0.0,
+                bounds_width,
+                bounds_height,
+                maskee.bounds.x_min.to_pixels(),
+                maskee.bounds.y_min.to_pixels(),
+                bounds_width,
+                bounds_height,
+            )
             .unwrap();
     }
 }
@@ -1293,4 +1336,12 @@ fn swf_shape_to_canvas_commands(
     }
 
     Some(canvas_data)
+}
+
+/// Represents a render target in the web backend.
+#[derive(Clone)]
+struct RenderTarget {
+    canvas: HtmlCanvasElement,
+    context: CanvasRenderingContext2d,
+    bounds: BoundingBox,
 }
