@@ -756,6 +756,7 @@ mod tests {
                 stage_size: (Twips::from_pixels(550.0), Twips::from_pixels(400.0)),
                 player: None,
                 load_manager: &mut LoadManager::new(),
+                options: &Default::default(),
             };
 
             root.post_instantiation(&mut avm, &mut context, root);

@@ -286,6 +286,7 @@ fn run_swf(swf_path: &str, num_frames: u32) -> Result<String, Error> {
         Box::new(NullNavigatorBackend::with_base_path(base_path, channel)),
         Box::new(NullInputBackend::new()),
         swf_data,
+        Default::default(),
     )?;
 
     for _ in 0..num_frames {

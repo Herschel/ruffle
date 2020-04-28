@@ -107,7 +107,8 @@ impl Ruffle {
         let navigator = Box::new(WebNavigatorBackend::new());
         let input = Box::new(WebInputBackend::new(&canvas));
 
-        let core = ruffle_core::Player::new(renderer, audio, navigator, input, data)?;
+        let core =
+            ruffle_core::Player::new(renderer, audio, navigator, input, data, Default::default())?;
         let mut core_lock = core.lock().unwrap();
         let frame_rate = core_lock.frame_rate();
         core_lock.audio_mut().set_frame_rate(frame_rate);

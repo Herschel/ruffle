@@ -11,6 +11,7 @@ use crate::player::Player;
 use crate::prelude::*;
 use crate::tag_utils::{SwfMovie, SwfSlice};
 use crate::transform::TransformStack;
+use crate::Options;
 use core::fmt;
 use gc_arena::{Collect, MutationContext};
 use rand::rngs::SmallRng;
@@ -96,6 +97,9 @@ pub struct UpdateContext<'a, 'gc, 'gc_context> {
     /// This is required for asynchronous behavior, such as fetching data from
     /// a URL.
     pub load_manager: &'a mut LoadManager<'gc>,
+
+    /// The player options set by the user.
+    pub options: &'a Options,
 }
 
 /// A queued ActionScript call.

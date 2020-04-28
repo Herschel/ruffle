@@ -12,6 +12,7 @@ use crate::loader::LoadManager;
 use crate::prelude::*;
 use crate::tag_utils::SwfMovie;
 use crate::transform::TransformStack;
+use crate::Options;
 use gc_arena::{make_arena, ArenaParameters, Collect, GcCell};
 use log::info;
 use rand::{rngs::SmallRng, SeedableRng};
@@ -108,6 +109,9 @@ pub struct Player {
     renderer: Renderer,
     pub navigator: Navigator,
     input: Input,
+
+    options: Options,
+
     transform_stack: TransformStack,
     view_matrix: Matrix,
     inverse_view_matrix: Matrix,
@@ -148,6 +152,7 @@ impl Player {
         navigator: Navigator,
         input: Input,
         swf_data: Vec<u8>,
+        options: crate::Options,
     ) -> Result<Arc<Mutex<Self>>, Error> {
         let movie = Arc::new(SwfMovie::from_data(&swf_data)?);
 
@@ -230,6 +235,9 @@ impl Player {
             audio,
             navigator,
             input,
+
+            options,
+
             self_reference: None,
         };
 
@@ -744,10 +752,14 @@ impl Player {
         // Calculate letterbox dimensions.
         // TODO: Letterbox should be an option; the original Flash Player defaults to showing content
         // in the extra margins.
-        self.letterbox = if margin_width > 0.0 {
-            Letterbox::Pillarbox(margin_width)
-        } else if margin_height > 0.0 {
-            Letterbox::Letterbox(margin_height)
+        self.letterbox = if self.options.letterbox {
+            if margin_width > 0.0 {
+                Letterbox::Pillarbox(margin_width)
+            } else if margin_height > 0.0 {
+                Letterbox::Letterbox(margin_height)
+            } else {
+                Letterbox::None
+            }
         } else {
             Letterbox::None
         };
@@ -818,6 +830,7 @@ impl Player {
                 system_prototypes: avm.prototypes().clone(),
                 player,
                 load_manager,
+                options: &Default::default(),
             };
 
             let ret = f(avm, &mut update_context);

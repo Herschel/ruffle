@@ -26,10 +26,13 @@ use std::time::Instant;
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
-#[structopt(name = "basic")]
+#[structopt(name = "ruffle")]
 struct Opt {
     #[structopt(name = "FILE", parse(from_os_str))]
     input_path: PathBuf,
+
+    #[structopt(flatten)]
+    options: ruffle_core::Options,
 }
 
 fn main() {
@@ -77,7 +80,14 @@ fn run_player(input_path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     )); //TODO: actually implement this backend type
     let display = renderer.display().clone();
     let input = Box::new(input::WinitInputBackend::new(display.clone()));
-    let player = Player::new(renderer, audio, navigator, input, swf_data)?;
+    let player = Player::new(
+        renderer,
+        audio,
+        navigator,
+        input,
+        swf_data,
+        Default::default(),
+    )?;
 
     let logical_size: LogicalSize<u32> = {
         let mut player_lock = player.lock().unwrap();

@@ -19,6 +19,7 @@ mod font;
 mod library;
 mod loader;
 pub mod matrix;
+mod options;
 mod player;
 mod prelude;
 mod property_map;
@@ -31,6 +32,7 @@ mod xml;
 pub mod backend;
 
 pub use events::PlayerEvent;
+pub use options::Options;
 pub use player::Player;
 pub use swf;
 pub use swf::Color;
