@@ -38,6 +38,11 @@ pub struct WebGlRenderBackend {
     test_stencil_mask: u32,
     next_stencil_mask: u32,
     mask_stack: Vec<(u32, u32)>,
+
+    active_program: *const ShaderProgram,
+    mask_state_dirty: bool,
+    blend_func: (u32, u32),
+
     viewport_width: f32,
     viewport_height: f32,
     view_matrix: [[f32; 4]; 4],
@@ -115,6 +120,7 @@ impl WebGlRenderBackend {
         );
 
         gl.enable(Gl::BLEND);
+        gl.blend_func(Gl::SRC_ALPHA, Gl::ONE_MINUS_SRC_ALPHA);
 
         // Necessary to load RGB textures (alignment defaults to 4).
         gl.pixel_storei(Gl::UNPACK_ALIGNMENT, 1);
@@ -138,6 +144,10 @@ impl WebGlRenderBackend {
             test_stencil_mask: 0,
             next_stencil_mask: 1,
             mask_stack: vec![],
+
+            active_program: std::ptr::null(),
+            mask_state_dirty: true,
+            blend_func: (Gl::SRC_ALPHA, Gl::ONE_MINUS_SRC_ALPHA),
 
             vertex_position_location,
             vertex_color_location,
@@ -578,28 +588,30 @@ impl RenderBackend for WebGlRenderBackend {
         ];
 
         // Set masking state.
-        // TODO: Keep a dirty flag and minimize state changes.
-        if self.num_masks > 0 {
-            self.gl.enable(Gl::STENCIL_TEST);
-            if self.num_masks_active < self.num_masks {
-                self.gl.stencil_mask(self.write_stencil_mask);
-                self.gl
-                    .stencil_func(Gl::ALWAYS, self.write_stencil_mask as i32, 0xff);
-                self.gl.stencil_op(Gl::KEEP, Gl::KEEP, Gl::REPLACE);
-                self.gl.color_mask(false, false, false, false);
+        if self.mask_state_dirty {
+            if self.num_masks > 0 {
+                self.gl.enable(Gl::STENCIL_TEST);
+                if self.num_masks_active < self.num_masks {
+                    self.gl.stencil_mask(self.write_stencil_mask);
+                    self.gl
+                        .stencil_func(Gl::ALWAYS, self.write_stencil_mask as i32, 0xff);
+                    self.gl.stencil_op(Gl::KEEP, Gl::KEEP, Gl::REPLACE);
+                    self.gl.color_mask(false, false, false, false);
+                } else {
+                    self.gl.stencil_mask(0);
+                    self.gl.stencil_func(
+                        Gl::EQUAL,
+                        self.test_stencil_mask as i32,
+                        self.test_stencil_mask,
+                    );
+                    self.gl.stencil_op(Gl::KEEP, Gl::KEEP, Gl::KEEP);
+                    self.gl.color_mask(true, true, true, true);
+                }
             } else {
-                self.gl.stencil_mask(0);
-                self.gl.stencil_func(
-                    Gl::EQUAL,
-                    self.test_stencil_mask as i32,
-                    self.test_stencil_mask,
-                );
-                self.gl.stencil_op(Gl::KEEP, Gl::KEEP, Gl::KEEP);
+                self.gl.disable(Gl::STENCIL_TEST);
                 self.gl.color_mask(true, true, true, true);
             }
-        } else {
-            self.gl.disable(Gl::STENCIL_TEST);
-            self.gl.color_mask(true, true, true, true);
+            self.mask_state_dirty = false;
         }
 
         for draw in &mesh.draws {
@@ -624,14 +636,30 @@ impl RenderBackend for WebGlRenderBackend {
                 8,
             );
 
-            let program = match &draw.draw_type {
-                DrawType::Color => &self.color_program,
-                DrawType::Gradient(_) => &self.gradient_program,
-                DrawType::Bitmap { .. } => &self.bitmap_program,
+            let (program, src_blend, dst_blend) = match &draw.draw_type {
+                DrawType::Color => (&self.color_program, Gl::SRC_ALPHA, Gl::ONE_MINUS_SRC_ALPHA),
+                DrawType::Gradient(_) => (
+                    &self.gradient_program,
+                    Gl::SRC_ALPHA,
+                    Gl::ONE_MINUS_SRC_ALPHA,
+                ),
+                // Bitmaps use pre-multiplied alpha.
+                DrawType::Bitmap { .. } => (&self.bitmap_program, Gl::ONE, Gl::ONE_MINUS_SRC_ALPHA),
             };
-            self.gl.use_program(Some(&program.program));
+
+            if program as *const ShaderProgram != self.active_program {
+                self.gl.use_program(Some(&program.program));
+                self.active_program = program as *const ShaderProgram;
+
+                if (src_blend, dst_blend) != self.blend_func {
+                    self.gl.blend_func(src_blend, dst_blend);
+                    self.blend_func = (src_blend, dst_blend);
+                }
+            }
 
             // Set common uniforms.
+            // TODO: Using designated layout specifiers in WebGL2/OpenGL ES 3, we could guarantee these
+            // are in the same location between shaders, and avoid changing them unless necessary.
             program.uniform_matrix4fv(&self.gl, ShaderUniform::WorldMatrix, &world_matrix);
             program.uniform_matrix4fv(&self.gl, ShaderUniform::ViewMatrix, &self.view_matrix);
             program.uniform4fv(&self.gl, ShaderUniform::MultColor, &mult_color);
@@ -639,11 +667,8 @@ impl RenderBackend for WebGlRenderBackend {
 
             // Set shader specific uniforms.
             match &draw.draw_type {
-                DrawType::Color => {
-                    self.gl.blend_func(Gl::SRC_ALPHA, Gl::ONE_MINUS_SRC_ALPHA);
-                }
+                DrawType::Color => (),
                 DrawType::Gradient(gradient) => {
-                    self.gl.blend_func(Gl::SRC_ALPHA, Gl::ONE_MINUS_SRC_ALPHA);
                     program.uniform_matrix3fv(
                         &self.gl,
                         ShaderUniform::TextureMatrix,
@@ -675,9 +700,6 @@ impl RenderBackend for WebGlRenderBackend {
                     );
                 }
                 DrawType::Bitmap(bitmap) => {
-                    // Bitmaps use pre-multiplied alpha.
-                    self.gl.blend_func(Gl::ONE, Gl::ONE_MINUS_SRC_ALPHA);
-
                     let texture = &self
                         .textures
                         .iter()
@@ -787,10 +809,12 @@ impl RenderBackend for WebGlRenderBackend {
         self.write_stencil_mask = self.next_stencil_mask;
         self.test_stencil_mask |= self.next_stencil_mask;
         self.next_stencil_mask <<= 1;
+        self.mask_state_dirty = true;
     }
 
     fn activate_mask(&mut self) {
         self.num_masks_active += 1;
+        self.mask_state_dirty = true;
     }
 
     fn pop_mask(&mut self) {
@@ -800,6 +824,7 @@ impl RenderBackend for WebGlRenderBackend {
             let (write, test) = self.mask_stack.pop().unwrap();
             self.write_stencil_mask = write;
             self.test_stencil_mask = test;
+            self.mask_state_dirty = true;
         } else {
             log::warn!("Mask stack underflow\n");
         }
