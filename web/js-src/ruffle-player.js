@@ -97,7 +97,7 @@ export class RufflePlayer extends HTMLElement {
         return false;
     }
 
-    async stream_swf_url(url) {
+    async stream_swf_url(url, config) {
         //TODO: Actually stream files...
         try {
             if (this.isConnected && !this.is_unused_fallback_object()) {
@@ -108,7 +108,7 @@ export class RufflePlayer extends HTMLElement {
 
                 if (response.ok) {
                     let data = await response.arrayBuffer();
-                    await this.play_swf_data(data);
+                    await this.play_swf_data(data, config);
                     console.log("Playing " + url);
                 } else {
                     console.error("SWF load failed: " + response.status + " " + response.statusText + " for " + url);
@@ -131,7 +131,7 @@ export class RufflePlayer extends HTMLElement {
         }
     }
 
-    async play_swf_data(data) {
+    async play_swf_data(data, config) {
         if (this.isConnected && !this.is_unused_fallback_object()) {
             console.log("Got SWF data");
 
@@ -146,7 +146,12 @@ export class RufflePlayer extends HTMLElement {
                 throw e;
             });
 
-            this.instance = Ruffle.new(this.canvas, new Uint8Array(data));
+            if (config === undefined) {
+                // Default to global config if none provided.
+                config = window.RufflePlayer;
+            }
+
+            this.instance = Ruffle.new(this.canvas, new Uint8Array(data), config);
             console.log("New Ruffle instance created.");
 
             if (this.play_button) {

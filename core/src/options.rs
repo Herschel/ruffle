@@ -1,11 +1,16 @@
 use std::{str::FromStr, string::ToString};
+
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 #[cfg(feature = "structopt")]
 use structopt::StructOpt;
 
 #[cfg_attr(feature = "structopt", derive(StructOpt))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Options {
-    #[structopt(long = "letterbox")]
+    #[cfg_attr(feature = "structopt", structopt(long = "letterbox"))]
     pub letterbox: bool,
 }
 

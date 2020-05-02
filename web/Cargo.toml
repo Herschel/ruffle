@@ -23,13 +23,13 @@ ruffle_render_canvas = { path = "../render/canvas" }
 ruffle_web_common = { path = "common" }
 ruffle_render_webgl = { path = "../render/webgl" }
 url = "2.1.1"
-wasm-bindgen = "0.2.57"
+wasm-bindgen = { version = "0.2.57", features = ["serde-serialize"] }
 wasm-bindgen-futures = "0.4.4"
 
 [dependencies.ruffle_core]
 path = "../core"
 default-features = false
-features = ["puremp3"]
+features = ["puremp3", "serde"]
 
 [dependencies.web-sys]
 version = "0.3.34"

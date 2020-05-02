@@ -6,7 +6,7 @@ mod navigator;
 use crate::{audio::WebAudioBackend, input::WebInputBackend, navigator::WebNavigatorBackend};
 use generational_arena::{Arena, Index};
 use js_sys::Uint8Array;
-use ruffle_core::PlayerEvent;
+use ruffle_core::{Options, PlayerEvent};
 use ruffle_render_canvas::WebCanvasRenderBackend;
 use ruffle_render_webgl::WebGlRenderBackend;
 use std::mem::drop;
@@ -52,8 +52,13 @@ pub struct Ruffle(Index);
 
 #[wasm_bindgen]
 impl Ruffle {
-    pub fn new(canvas: HtmlCanvasElement, swf_data: Uint8Array) -> Result<Ruffle, JsValue> {
-        Ruffle::new_internal(canvas, swf_data).map_err(|_| "Error creating player".into())
+    pub fn new(
+        canvas: HtmlCanvasElement,
+        swf_data: Uint8Array,
+        options: &JsValue,
+    ) -> Result<Ruffle, JsValue> {
+        let options = options.into_serde().unwrap_or_default();
+        Ruffle::new_internal(canvas, swf_data, options).map_err(|_| "Error creating player".into())
     }
 
     pub fn play(&mut self) {
@@ -94,6 +99,7 @@ impl Ruffle {
     fn new_internal(
         canvas: HtmlCanvasElement,
         swf_data: Uint8Array,
+        options: Options,
     ) -> Result<Ruffle, Box<dyn Error>> {
         console_error_panic_hook::set_once();
         let _ = console_log::init_with_level(log::Level::Trace);
@@ -107,8 +113,7 @@ impl Ruffle {
         let navigator = Box::new(WebNavigatorBackend::new());
         let input = Box::new(WebInputBackend::new(&canvas));
 
-        let core =
-            ruffle_core::Player::new(renderer, audio, navigator, input, data, Default::default())?;
+        let core = ruffle_core::Player::new(renderer, audio, navigator, input, data, options)?;
         let mut core_lock = core.lock().unwrap();
         let frame_rate = core_lock.frame_rate();
         core_lock.audio_mut().set_frame_rate(frame_rate);
