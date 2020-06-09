@@ -9,7 +9,7 @@ use crate::prelude::*;
 use crate::tag_utils::SwfMovie;
 use crate::transform::Transform;
 use gc_arena::{Collect, Gc, GcCell, MutationContext};
-use std::sync::Arc;
+use std::{cell::Ref, sync::Arc};
 
 /// A dynamic text field.
 /// The text in this text field can be changed dynamically.
@@ -49,6 +49,9 @@ pub struct EditTextData<'gc> {
 
     // The AVM1 object handle
     object: Option<Object<'gc>>,
+
+    /// The variable path that this text field is bound to (AVM1 only).
+    variable: Option<String>,
 }
 
 impl<'gc> EditText<'gc> {
@@ -84,6 +87,12 @@ impl<'gc> EditText<'gc> {
             swf_tag.initial_text.clone().unwrap_or_default()
         };
 
+        let variable = if !swf_tag.variable_name.is_empty() {
+            Some(swf_tag.variable_name.clone())
+        } else {
+            None
+        };
+
         EditText(GcCell::allocate(
             context.gc_context,
             EditTextData {
@@ -101,6 +110,7 @@ impl<'gc> EditText<'gc> {
                 is_word_wrap,
                 object: None,
                 cached_break_points: None,
+                variable,
             },
         ))
     }
@@ -191,6 +201,20 @@ impl<'gc> EditText<'gc> {
     pub fn set_word_wrap(self, is_word_wrap: bool, gc_context: MutationContext<'gc, '_>) {
         self.0.write(gc_context).cached_break_points = None;
         self.0.write(gc_context).is_word_wrap = is_word_wrap;
+    }
+
+    /// Returns the variable that this text field is bound to.
+    pub fn variable(&self) -> Option<Ref<str>> {
+        let text = self.0.read();
+        if text.variable.is_some() {
+            Some(Ref::map(text, |text| text.variable.as_deref().unwrap()))
+        } else {
+            None
+        }
+    }
+
+    pub fn set_variable(self, variable: Option<String>, context: &mut UpdateContext<'_, 'gc, '_>) {
+        self.0.write(context.gc_context).variable = variable
     }
 
     /// Construct a base text transform for this `EditText`, to be used for
