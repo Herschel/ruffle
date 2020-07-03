@@ -426,7 +426,7 @@ impl<R: Read> Reader<R> {
             Some(TagCode::DefineFont3) => {
                 Tag::DefineFont2(Box::new(tag_reader.read_define_font_2(3)?))
             }
-            Some(TagCode::DefineFont4) => Tag::DefineFont4(tag_reader.read_define_font_4()?),
+            Some(TagCode::DefineFont4) => Tag::DefineFont4(tag_reader.read_define_font_4(length)?),
             Some(TagCode::DefineFontAlignZones) => tag_reader.read_define_font_align_zones()?,
             Some(TagCode::DefineFontInfo) => tag_reader.read_define_font_info(1)?,
             Some(TagCode::DefineFontInfo2) => tag_reader.read_define_font_info(2)?,
@@ -1313,13 +1313,15 @@ impl<R: Read> Reader<R> {
         })
     }
 
-    pub fn read_define_font_4(&mut self) -> Result<Font4> {
+    pub fn read_define_font_4(&mut self, tag_length: usize) -> Result<Font4> {
         let id = self.read_character_id()?;
         let flags = self.read_u8()?;
         let name = self.read_c_string()?;
         let has_font_data = flags & 0b100 != 0;
         let data = if has_font_data {
-            let mut data = vec![];
+            let data_len = tag_length - (name.len() + 1) - 3;
+            let mut data = Vec::with_capacity(data_len);
+            data.resize(data_len, 0);
             self.input.read_to_end(&mut data)?;
             Some(data)
         } else {
