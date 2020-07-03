@@ -403,10 +403,10 @@ impl<R: Read> Reader<R> {
             Some(TagCode::DefineBitsJpeg3) => tag_reader.read_define_bits_jpeg_3(3)?,
             Some(TagCode::DefineBitsJpeg4) => tag_reader.read_define_bits_jpeg_3(4)?,
             Some(TagCode::DefineButton) => {
-                Tag::DefineButton(Box::new(tag_reader.read_define_button_1()?))
+                Tag::DefineButton(Box::new(tag_reader.read_define_button_1(length)?))
             }
             Some(TagCode::DefineButton2) => {
-                Tag::DefineButton2(Box::new(tag_reader.read_define_button_2()?))
+                Tag::DefineButton2(Box::new(tag_reader.read_define_button_2(length)?))
             }
             Some(TagCode::DefineButtonCxform) => {
                 Tag::DefineButtonColorTransform(tag_reader.read_define_button_cxform(length)?)
@@ -881,14 +881,17 @@ impl<R: Read> Reader<R> {
         Ok((tag_code, length))
     }
 
-    pub fn read_define_button_1(&mut self) -> Result<Button> {
-        let id = self.read_u16()?;
+    pub fn read_define_button_1(&mut self, tag_length: usize) -> Result<Button> {
+        let version = self.version;
+        let mut reader = Reader::new(self.get_inner().by_ref().take(tag_length as u64), version);
+
+        let id = reader.read_u16()?;
         let mut records = Vec::new();
-        while let Some(record) = self.read_button_record(1)? {
+        while let Some(record) = reader.read_button_record(1)? {
             records.push(record);
         }
         let mut action_data = Vec::new();
-        self.input.read_to_end(&mut action_data)?;
+        reader.input.read_to_end(&mut action_data)?;
         Ok(Button {
             id,
             is_track_as_menu: false,
@@ -903,21 +906,24 @@ impl<R: Read> Reader<R> {
         })
     }
 
-    pub fn read_define_button_2(&mut self) -> Result<Button> {
-        let id = self.read_u16()?;
-        let flags = self.read_u8()?;
+    pub fn read_define_button_2(&mut self, tag_length: usize) -> Result<Button> {
+        let version = self.version;
+        let mut reader = Reader::new(self.get_inner().by_ref().take(tag_length as u64), version);
+
+        let id = reader.read_u16()?;
+        let flags = reader.read_u8()?;
         let is_track_as_menu = (flags & 0b1) != 0;
-        let action_offset = self.read_u16()?;
+        let action_offset = reader.read_u16()?;
 
         let mut records = Vec::new();
-        while let Some(record) = self.read_button_record(2)? {
+        while let Some(record) = reader.read_button_record(2)? {
             records.push(record);
         }
 
         let mut actions = Vec::new();
         if action_offset != 0 {
             loop {
-                let (button_action, has_more_actions) = self.read_button_action()?;
+                let (button_action, has_more_actions) = reader.read_button_action()?;
                 actions.push(button_action);
                 if !has_more_actions {
                     break;

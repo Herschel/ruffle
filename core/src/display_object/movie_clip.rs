@@ -181,11 +181,11 @@ impl<'gc> MovieClip<'gc> {
             TagCode::DefineButton => self
                 .0
                 .write(context.gc_context)
-                .define_button_1(context, reader),
+                .define_button_1(context, reader, tag_len),
             TagCode::DefineButton2 => self
                 .0
                 .write(context.gc_context)
-                .define_button_2(context, reader),
+                .define_button_2(context, reader, tag_len),
             TagCode::DefineButtonCxform => self
                 .0
                 .write(context.gc_context)
@@ -1761,8 +1761,9 @@ impl<'gc, 'a> MovieClipData<'gc> {
         &mut self,
         context: &mut UpdateContext<'_, 'gc, '_>,
         reader: &mut SwfStream<&'a [u8]>,
+        tag_len: usize,
     ) -> DecodeResult {
-        let swf_button = reader.read_define_button_1()?;
+        let swf_button = reader.read_define_button_1(tag_len)?;
         let button = Button::from_swf_tag(
             &swf_button,
             &self.static_data.swf,
@@ -1781,8 +1782,9 @@ impl<'gc, 'a> MovieClipData<'gc> {
         &mut self,
         context: &mut UpdateContext<'_, 'gc, '_>,
         reader: &mut SwfStream<&'a [u8]>,
+        tag_len: usize,
     ) -> DecodeResult {
-        let swf_button = reader.read_define_button_2()?;
+        let swf_button = reader.read_define_button_2(tag_len)?;
         let button = Button::from_swf_tag(
             &swf_button,
             &self.static_data.swf,
