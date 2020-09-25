@@ -264,15 +264,18 @@ pub fn decode_jpeg(
     let decoded_data = decoder.decode()?;
 
     // Decompress the alpha data (DEFLATE compression).
-    if let Some(alpha_data) = alpha_data {
-        let alpha_data = {
-            let mut data = vec![];
-            let mut decoder = libflate::zlib::Decoder::new(alpha_data)?;
-            decoder.read_to_end(&mut data)?;
-            data
-        };
+    let alpha_data = if let Some(alpha_data) = alpha_data {
+        let mut data = vec![];
+        let mut decoder = libflate::zlib::Decoder::new(alpha_data)?;
+        decoder.read_to_end(&mut data)?;
+        data
+    } else {
+        vec![]
+    };
 
-        if alpha_data.len() == decoded_data.len() / 3 {
+    use jpeg_decoder::PixelFormat;
+    match metadata.pixel_format {
+        PixelFormat::RGB24 => {
             let mut rgba = Vec::with_capacity((decoded_data.len() / 3) * 4);
             let mut i = 0;
             let mut a = 0;
@@ -284,18 +287,42 @@ pub fn decode_jpeg(
                 i += 3;
                 a += 1;
             }
-            return Ok(Bitmap {
-                width: metadata.width.into(),
-                height: metadata.height.into(),
-                data: BitmapFormat::Rgba(rgba),
-            });
-        } else {
-            // Size isn't correct; fallback to RGB?
-            log::error!("Size mismatch in DefineBitsJPEG3 alpha data");
+        }
+        PixelFormat::L8 => {
+            let mut rgba = Vec::with_capacity(decoded_data.len() * 4);
+            let mut i = 0;
+            let mut a = 0;
+            while i < decoded_data.len() {
+                rgba.push(decoded_data[i]);
+                rgba.push(decoded_data[i]);
+                rgba.push(decoded_data[i]);
+                rgba.push(alpha_data[a]);
+                i += 1;
+                a += 1;
+            }
+        }
+        PixelFormat::CMYK32 => {
+            let mut rgba = Vec::with_capacity(decoded_data.len());
+            let mut i = 0;
+            let mut a = 0;
+            while i < decoded_data.len() {
+                let c = 1.0 - decoded_data[i] as f32 / 255.0;
+                let m = 1.0 - decoded_data[i + 1] as f32 / 255.0;
+                let y = 1.0 - decoded_data[i + 2] as f32 / 255.0;
+                let k = 1.0 - decoded_data[i + 3] as f32 / 255.0;
+                let r = (255.0 * c * k) as u8;
+                let g = (255.0 * m * k) as u8;
+                let b = (255.0 * y * k) as u8;
+                rgba.push(r);
+                rgba.push(g);
+                rgba.push(b);
+                rgba.push(alpha_data[a]);
+                i += 4;
+                a += 1;
+            }
         }
     }
 
-    // No alpha.
     Ok(Bitmap {
         width: metadata.width.into(),
         height: metadata.height.into(),
