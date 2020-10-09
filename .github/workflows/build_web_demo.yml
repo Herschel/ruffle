@@ -1,0 +1,95 @@
+name: Build web demo
+
+on:
+  push:
+    branches: [ ci-web-demo ]
+
+jobs:
+  create-nightly-release:
+    name: Create nightly release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      date: ${{ steps.current_time_underscores.outputs.formattedTime }}
+    steps:
+      - name: Get current time
+        uses: 1466587594/get-current-time@v2
+        id: current_time_dashes
+        with:
+          format: YYYY-MM-DD
+
+      - name: Get current time with underscores
+        uses: 1466587594/get-current-time@v2
+        id: current_time_underscores
+        with:
+          format: YYYY_MM_DD
+
+      - name: Create release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: nightly-${{ steps.current_time_dashes.outputs.formattedTime }}
+          release_name: Nightly ${{ steps.current_time_dashes.outputs.formattedTime }}
+          prerelease: true
+
+  build-desktop-nightlies:
+    name: Build desktop nightly for ${{ matrix.os }}
+    needs: create-nightly-release
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Use stable rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+
+      - name: Install linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get -y install libasound2-dev libxcb-shape0-dev libxcb-xfixes0-dev
+
+      - name: Setup node
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/setup-node@v1
+        with:
+          node-version: 12
+
+      - name: Build web
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: web
+        run: |
+          npm run bootstrap
+          npm run build
+
+      - name: Get web demo
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions-rs/checkout@v2
+        with:
+          repository: ruffle-rs/demo
+          path: 'demo'
+
+      - name: Update web demo
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cd demo
+          git rm *.wasm
+          cp web/packages/demo/dist/* demo/
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add *
+          git commit -m "Nightly update"
+
+      - name: Push web demo
+        if: matrix.os == 'ubuntu-latest'
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          directory: 'demo'
+          force: true
