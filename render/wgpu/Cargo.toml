@@ -6,7 +6,7 @@ edition = "2018"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-wgpu = {git = "https://github.com/gfx-rs/wgpu-rs", rev = "e3eadca8c626beb9a1c25c359b0e20f6fdef00c4"}
+wgpu = {git = "https://github.com/gfx-rs/wgpu-rs", rev = "2563f2083720b3553c9e41ae3216b3acf06bfcff"}
 image = "0.23.11"
 jpeg-decoder = "0.1.20"
 log = "0.4"

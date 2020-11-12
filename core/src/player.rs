@@ -430,19 +430,20 @@ impl Player {
             self.frame_accumulator += dt;
             let frame_time = 1000.0 / self.frame_rate;
 
-            const MAX_FRAMES_PER_TICK: u32 = 5; // Sanity cap on frame tick.
-            let mut frame = 0;
-            while frame < MAX_FRAMES_PER_TICK && self.frame_accumulator >= frame_time {
-                self.frame_accumulator -= frame_time;
-                self.run_frame();
-                frame += 1;
-            }
+            // const MAX_FRAMES_PER_TICK: u32 = 5; // Sanity cap on frame tick.
+            // let mut frame = 0;
+            // while frame < MAX_FRAMES_PER_TICK && self.frame_accumulator >= frame_time {
+            //     self.frame_accumulator -= frame_time;
+            //     self.run_frame();
+            //     frame += 1;
+            // }
 
-            // Sanity: If we had too many frames to tick, just reset the accumulator
-            // to prevent running at turbo speed.
-            if self.frame_accumulator >= frame_time {
-                self.frame_accumulator = 0.0;
-            }
+            // // Sanity: If we had too many frames to tick, just reset the accumulator
+            // // to prevent running at turbo speed.
+            // if self.frame_accumulator >= frame_time {
+            //     self.frame_accumulator = 0.0;
+            // }
+            self.run_frame();
 
             self.update_timers(dt);
             self.audio.tick();
@@ -1182,6 +1183,7 @@ impl Player {
         data: &[u8],
         renderer: &mut dyn RenderBackend,
     ) -> Result<crate::font::Font<'gc>, Error> {
+        return Err("".into());
         let mut reader = swf::read::Reader::new(data, 8);
         let device_font =
             crate::font::Font::from_swf_tag(gc_context, renderer, &reader.read_define_font_2(3)?)?;

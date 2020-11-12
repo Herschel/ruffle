@@ -212,6 +212,7 @@ fn run_player(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     let mut mouse_pos = PhysicalPosition::new(0.0, 0.0);
     let mut time = Instant::now();
     let mut next_frame_time = Instant::now();
+    let mut ticked = false;
     loop {
         // Poll UI events
         event_loop.run(move |event, _window_target, control_flow| {
@@ -229,6 +230,7 @@ fn run_player(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
                         time = new_time;
                         let mut player_lock = player.lock().unwrap();
                         player_lock.tick(dt as f64 / 1000.0);
+                        ticked = true;
                         next_frame_time = new_time + player_lock.time_til_next_frame();
                         if player_lock.needs_render() {
                             window.request_redraw();
@@ -237,7 +239,12 @@ fn run_player(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 // Render
-                winit::event::Event::RedrawRequested(_) => player.lock().unwrap().render(),
+                winit::event::Event::RedrawRequested(_) => {
+                    player.lock().unwrap().render();
+                    if ticked {
+                        *control_flow = ControlFlow::Exit;
+                    }
+                }
 
                 winit::event::Event::WindowEvent { event, .. } => match event {
                     WindowEvent::Resized(size) => {
