@@ -1,13 +1,14 @@
 #version 450
 
-// Set 1: shape
-layout(set = 1, binding = 1) uniform Colors {
+// Push constants: matrix + color
+layout(push_constant) uniform PushConstants {
+    mat4 world_matrix;
     vec4 mult_color;
     vec4 add_color;
 };
 
-// Set 2: gradient
-layout(std430, set = 2, binding = 1) readonly buffer Gradient {
+// Set 1: gradient
+layout(std430, set = 1, binding = 1) readonly buffer Gradient {
     vec4 u_colors[16];
     float u_ratios[16];
     int u_gradient_type;

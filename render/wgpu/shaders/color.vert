@@ -5,9 +5,11 @@ layout(set = 0, binding = 0) uniform Globals {
     mat4 view_matrix;
 };
 
-// Set 1: shape
-layout(set = 1, binding = 0) uniform Transforms {
+// Push constants: matrix + color
+layout(push_constant) uniform PushConstants {
     mat4 world_matrix;
+    vec4 mult_color;
+    vec4 add_color;
 };
 
 layout(location = 0) in vec2 position;
