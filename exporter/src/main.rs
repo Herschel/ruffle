@@ -387,7 +387,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             label: None,
             features: Default::default(),
             limits: wgpu::Limits::default(),
-            shader_validation: false,
         },
         trace_path(&opt),
     ))?;

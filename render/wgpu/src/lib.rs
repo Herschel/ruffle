@@ -227,7 +227,6 @@ impl WgpuRenderBackend<SwapChainTarget> {
                         as u32,
                     ..Default::default()
                 },
-                shader_validation: false,
             },
             trace_path,
         ))?;
@@ -898,7 +897,9 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             (frame_output.view(), None)
         };
 
+        let label = create_debug_label!("Main render pass");
         let render_pass = draw_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: label.as_deref(),
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: color_attachment,
                 ops: wgpu::Operations {
@@ -997,7 +998,9 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             frame
                 .render_pass
                 .set_vertex_buffer(0, self.quad_vbo.slice(..));
-            frame.render_pass.set_index_buffer(self.quad_ibo.slice(..));
+            frame
+                .render_pass
+                .set_index_buffer(self.quad_ibo.slice(..), wgpu::IndexFormat::Uint16);
 
             match self.mask_state {
                 MaskState::NoMask => (),
@@ -1100,7 +1103,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
                 .set_vertex_buffer(0, draw.vertex_buffer.slice(..));
             frame
                 .render_pass
-                .set_index_buffer(draw.index_buffer.slice(..));
+                .set_index_buffer(draw.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
             match self.mask_state {
                 MaskState::NoMask => (),
@@ -1173,7 +1176,9 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
         frame
             .render_pass
             .set_vertex_buffer(0, self.quad_vbo.slice(..));
-        frame.render_pass.set_index_buffer(self.quad_ibo.slice(..));
+        frame
+            .render_pass
+            .set_index_buffer(self.quad_ibo.slice(..), wgpu::IndexFormat::Uint16);
 
         match self.mask_state {
             MaskState::NoMask => (),
