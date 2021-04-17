@@ -56,6 +56,7 @@ module.exports = (env, argv) => {
                                 /-/g,
                                 ""
                             )}`;
+                            console.log(`VERSION: ${version}`);
                             const version_name =
                                 versionChannel === "nightly"
                                     ? `${packageVersion} nightly ${buildDate}`

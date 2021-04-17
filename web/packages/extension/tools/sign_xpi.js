@@ -43,6 +43,7 @@ async function sign(
         process.env.FIREFOX_EXTENSION_ID
     ) {
         const { version } = require("../assets/manifest.json");
+        console.log(`SIGN VERSION: ${version}`);
         await sign(
             process.env.MOZILLA_API_KEY,
             process.env.MOZILLA_API_SECRET,
