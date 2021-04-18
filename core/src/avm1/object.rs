@@ -110,10 +110,33 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         name: &str,
         activation: &mut Activation<'_, 'gc, '_>,
     ) -> Result<Value<'gc>, Error<'gc>> {
+        let this: Object<'gc> = (*self).into();
         if self.has_own_property(activation, name) {
-            self.get_local(name, activation, (*self).into())
+            self.get_local(name, activation, this)
         } else {
-            Ok(search_prototype(self.proto(), name, activation, (*self).into())?.0)
+            match search_prototype(self.proto(), name, activation, this)? {
+                (Value::Undefined, None) => {
+                    let resolve_fn =
+                        search_prototype(this.into(), "__resolve", activation, this)?.0;
+                    if resolve_fn != Value::Undefined {
+                        let value = resolve_fn.coerce_to_object(activation).call(
+                            "__resolve",
+                            activation,
+                            this,
+                            None,
+                            &[crate::avm1::AvmString::new(
+                                activation.context.gc_context,
+                                name.to_string(),
+                            )
+                            .into()],
+                        )?;
+                        Ok(value)
+                    } else {
+                        Ok(Value::Undefined)
+                    }
+                }
+                (val, _) => Ok(val),
+            }
         }
     }
 
