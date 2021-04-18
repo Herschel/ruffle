@@ -299,6 +299,7 @@ swf_tests! {
     (array_apply, "avm1/array_constructor", 1),
     (object_constructor, "avm1/object_constructor", 1),
     (object_function, "avm1/object_function", 1),
+    (object_resolve, "avm1/object_resolve", 1),
     (parse_int, "avm1/parse_int", 1),
     (bitmap_filter, "avm1/bitmap_filter", 1),
     (blur_filter, "avm1/blur_filter", 1),

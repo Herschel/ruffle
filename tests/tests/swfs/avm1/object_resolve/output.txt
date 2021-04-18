@@ -1,0 +1,6 @@
+Base ctor
+Base ctor
+Sub ctor
+false
+Sub proto __resolve: foo
+undefined
