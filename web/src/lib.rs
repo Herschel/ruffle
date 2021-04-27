@@ -176,7 +176,7 @@ struct MovieMetadata {
 ///
 /// This type is exported to JS, and is used to interact with the library.
 #[wasm_bindgen]
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Ruffle(Index);
 
 #[wasm_bindgen]
@@ -203,24 +203,18 @@ impl Ruffle {
     ///
     /// This method should only be called once per player.
     pub fn stream_from(&mut self, movie_url: &str, parameters: &JsValue) -> Result<(), JsValue> {
-        let ruffle = self.clone();
-        INSTANCES.with(|instances| {
-            let instances = instances.borrow();
-            let instance = instances.get(ruffle.0).unwrap().borrow();
+        let _ = self.with_core_mut(|core| {
             let mut parameters_to_load = PropertyMap::new();
             populate_movie_parameters(&parameters, &mut parameters_to_load);
 
+            let ruffle = *self;
             let on_metadata = move |swf_header: &ruffle_core::swf::Header| {
                 ruffle.on_metadata(swf_header);
             };
 
-            instance.core.lock().unwrap().fetch_root_movie(
-                movie_url,
-                parameters_to_load,
-                Box::new(on_metadata),
-            );
-            Ok(())
-        })
+            core.fetch_root_movie(movie_url, parameters_to_load, Box::new(on_metadata));
+        });
+        Ok(())
     }
 
     /// Play an arbitrary movie on this instance.
@@ -238,38 +232,27 @@ impl Ruffle {
 
         self.on_metadata(movie.header());
 
-        INSTANCES.with(|instances| {
-            let instances = instances.borrow();
-            let instance = instances.get(self.0).unwrap();
-            instance.borrow().core.lock().unwrap().set_root_movie(movie);
+        let _ = self.with_core_mut(move |core| {
+            core.set_root_movie(movie);
         });
 
         Ok(())
     }
 
     pub fn play(&mut self) {
-        INSTANCES.with(|instances| {
-            let instances = instances.borrow();
-            let instance = instances.get(self.0).unwrap();
-            instance.borrow().core.lock().unwrap().set_is_playing(true);
+        let _ = self.with_core_mut(|core| {
+            core.set_is_playing(true);
         });
     }
 
     pub fn pause(&mut self) {
-        INSTANCES.with(|instances| {
-            let instances = instances.borrow();
-            let instance = instances.get(self.0).unwrap();
-            instance.borrow().core.lock().unwrap().set_is_playing(false);
+        let _ = self.with_core_mut(|core| {
+            core.set_is_playing(false);
         });
     }
 
     pub fn is_playing(&mut self) -> bool {
-        INSTANCES.with(|instances| {
-            let instances = instances.borrow();
-            let instance = instances.get(self.0).unwrap();
-            let is_playing = instance.borrow().core.lock().unwrap().is_playing();
-            is_playing
-        })
+        self.with_core(|core| core.is_playing()).unwrap_or_default()
     }
 
     pub fn get_builtin_menu_items(&mut self) -> Vec<JsValue> {
@@ -342,22 +325,14 @@ impl Ruffle {
 
     pub fn destroy(&mut self) {
         // Remove instance from the active list.
-        if let Some(instance) = INSTANCES.with(|instances| {
-            if let Ok(mut instances) = instances.try_borrow_mut() {
-                instances.remove(self.0)
-            } else {
-                // If we're being destroyed mid-panic, we won't mind not being able to remove this.
-                None
-            }
-        }) {
-            let mut instance = instance.borrow_mut();
+        if let Ok(mut instance) = self.remove_instance() {
             instance.canvas.remove();
 
             // Stop all audio playing from the instance.
-            let mut player = instance.core.lock().unwrap();
-            player.audio_mut().stop_all_sounds();
-            player.flush_shared_objects();
-            drop(player);
+            let _ = instance.with_core_mut(|core| {
+                core.audio_mut().stop_all_sounds();
+                core.flush_shared_objects();
+            });
 
             // Clean up all event listeners.
             if let Some(window) = web_sys::window() {
@@ -368,7 +343,7 @@ impl Ruffle {
                             "pointermove",
                             mouse_move_callback.as_ref().unchecked_ref(),
                         )
-                        .unwrap();
+                        .warn_on_error();
                     instance.mouse_move_callback = None;
                 }
                 if let Some(mouse_down_callback) = &instance.mouse_down_callback {
@@ -378,7 +353,7 @@ impl Ruffle {
                             "pointerdown",
                             mouse_down_callback.as_ref().unchecked_ref(),
                         )
-                        .unwrap();
+                        .warn_on_error();
                     instance.mouse_down_callback = None;
                 }
                 if let Some(player_mouse_down_callback) = &instance.player_mouse_down_callback {
@@ -388,7 +363,7 @@ impl Ruffle {
                             "pointerdown",
                             player_mouse_down_callback.as_ref().unchecked_ref(),
                         )
-                        .unwrap();
+                        .warn_on_error();
                     instance.player_mouse_down_callback = None;
                 }
                 if let Some(window_mouse_down_callback) = &instance.window_mouse_down_callback {
@@ -398,7 +373,7 @@ impl Ruffle {
                             window_mouse_down_callback.as_ref().unchecked_ref(),
                             true,
                         )
-                        .unwrap();
+                        .warn_on_error();
                     instance.window_mouse_down_callback = None;
                 }
                 if let Some(mouse_up_callback) = &instance.mouse_up_callback {
@@ -408,7 +383,7 @@ impl Ruffle {
                             "pointerup",
                             mouse_up_callback.as_ref().unchecked_ref(),
                         )
-                        .unwrap();
+                        .warn_on_error();
                     instance.mouse_up_callback = None;
                 }
                 if let Some(mouse_wheel_callback) = &instance.mouse_wheel_callback {
@@ -418,7 +393,7 @@ impl Ruffle {
                             "wheel",
                             mouse_wheel_callback.as_ref().unchecked_ref(),
                         )
-                        .unwrap();
+                        .warn_on_error();
                     instance.mouse_wheel_callback = None;
                 }
                 if let Some(key_down_callback) = &instance.key_down_callback {
@@ -427,7 +402,7 @@ impl Ruffle {
                             "keydown",
                             key_down_callback.as_ref().unchecked_ref(),
                         )
-                        .unwrap();
+                        .warn_on_error();
                     instance.key_down_callback = None;
                 }
                 if let Some(key_up_callback) = &instance.key_up_callback {
@@ -436,7 +411,7 @@ impl Ruffle {
                             "keyup",
                             key_up_callback.as_ref().unchecked_ref(),
                         )
-                        .unwrap();
+                        .warn_on_error();
                     instance.key_up_callback = None;
                 }
                 if let Some(unload_callback) = &instance.unload_callback {
@@ -445,7 +420,7 @@ impl Ruffle {
                             "unload",
                             unload_callback.as_ref().unchecked_ref(),
                         )
-                        .unwrap();
+                        .warn_on_error();
                     instance.unload_callback = None;
                 }
             }
@@ -453,7 +428,7 @@ impl Ruffle {
             // Cancel the animation handler, if it's still active.
             if let Some(id) = instance.animation_handler_id {
                 if let Some(window) = web_sys::window() {
-                    let _ = window.cancel_animation_frame(id.into());
+                    window.cancel_animation_frame(id.into()).warn_on_error();
                 }
             }
         }
@@ -477,44 +452,30 @@ impl Ruffle {
             }
         }
 
-        INSTANCES.with(move |instances| {
-            if let Ok(instances) = instances.try_borrow() {
-                if let Some(instance) = instances.get(self.0) {
-                    if let Ok(mut player) = instance.borrow().core.try_lock() {
-                        return external_to_js_value(player.call_internal_interface(name, args));
-                    }
-                }
+        self.with_instance(|instance| {
+            if let Ok(mut player) = instance.core.try_lock() {
+                return external_to_js_value(player.call_internal_interface(name, args));
             }
             JsValue::NULL
         })
+        .unwrap_or(JsValue::NULL)
     }
 
     pub fn set_trace_observer(&self, observer: JsValue) {
-        INSTANCES.with(move |instances| {
-            if let Ok(instances) = instances.try_borrow() {
-                if let Some(instance) = instances.get(self.0) {
-                    *instance.borrow_mut().trace_observer.borrow_mut() = observer;
-                }
-            }
-        })
+        let _ = self.with_instance(|instance| {
+            *instance.trace_observer.borrow_mut() = observer;
+        });
     }
 
     /// Returns the web AudioContext used by this player.
     /// Returns `None` if the audio backend does not use Web Audio.
     pub fn audio_context(&self) -> Option<web_sys::AudioContext> {
-        INSTANCES.with(move |instances| {
-            if let Ok(instances) = instances.try_borrow() {
-                if let Some(instance) = instances.get(self.0) {
-                    let instance = instance.borrow_mut();
-                    let player = instance.core.lock().unwrap();
-                    return player
-                        .audio()
-                        .downcast_ref::<audio::WebAudioBackend>()
-                        .map(|audio| audio.audio_context().clone());
-                }
-            }
-            None
+        self.with_core_mut(|core| {
+            core.audio()
+                .downcast_ref::<audio::WebAudioBackend>()
+                .map(|audio| audio.audio_context().clone())
         })
+        .unwrap_or_default()
     }
 }
 
@@ -558,16 +519,22 @@ impl Ruffle {
         let video = Box::new(SoftwareVideoBackend::new());
         let log = Box::new(log_adapter::WebLogBackend::new(trace_observer.clone()));
         let ui = Box::new(ui::WebUiBackend::new(js_player.clone(), &canvas));
+
         let core =
             ruffle_core::Player::new(renderer, audio, navigator, storage, locale, video, log, ui)?;
-        {
-            let mut core = core.lock().unwrap();
+        if let Ok(mut core) = core.try_lock() {
+            // Set config parameters.
             if let Some(color) = config.background_color.and_then(parse_html_color) {
                 core.set_background_color(Some(color));
             }
             core.set_letterbox(config.letterbox);
             core.set_warn_on_unsupported_content(config.warn_on_unsupported_content);
             core.set_max_execution_duration(config.max_execution_duration);
+
+            // Create the external interface.
+            if allow_script_access {
+                core.add_external_interface(Box::new(JavascriptInterface::new(js_player.clone())));
+            }
         }
 
         // Create instance.
@@ -595,334 +562,264 @@ impl Ruffle {
         };
 
         // Prevent touch-scrolling on canvas.
-        canvas.style().set_property("touch-action", "none").unwrap();
+        canvas
+            .style()
+            .set_property("touch-action", "none")
+            .warn_on_error();
 
         // Register the instance and create the animation frame closure.
-        let mut ruffle = INSTANCES.with(move |instances| {
-            let index = instances.borrow_mut().insert(RefCell::new(instance));
-            let instances = instances.borrow();
-            let ruffle = Ruffle(index);
+        let mut ruffle = Ruffle::add_instance(instance)?;
 
-            // Create the external interface
-            if allow_script_access {
-                let instance = instances.get(index).unwrap();
-                let player = instance.borrow().js_player.clone();
-                instance
-                    .borrow()
-                    .core
-                    .lock()
-                    .unwrap()
-                    .add_external_interface(Box::new(JavascriptInterface::new(player)));
-            }
-
-            // Create the animation frame closure.
-            {
-                let mut ruffle = ruffle.clone();
-                let instance = instances.get(index).unwrap();
-                instance.borrow_mut().animation_handler =
-                    Some(Closure::wrap(Box::new(move |timestamp: f64| {
-                        ruffle.tick(timestamp);
-                    }) as Box<dyn FnMut(f64)>));
-            }
+        // Create the animation frame closure.
+        ruffle.with_instance_mut(|instance| {
+            instance.animation_handler = Some(Closure::wrap(Box::new(move |timestamp: f64| {
+                ruffle.tick(timestamp);
+            }) as Box<dyn FnMut(f64)>));
 
             // Create mouse move handler.
-            {
-                let mouse_move_callback = Closure::wrap(Box::new(move |js_event: PointerEvent| {
-                    INSTANCES.with(move |instances| {
-                        let instances = instances.borrow();
-                        if let Some(instance) = instances.get(index) {
-                            let instance = instance.borrow();
-                            let event = PlayerEvent::MouseMove {
-                                x: f64::from(js_event.offset_x()) * instance.device_pixel_ratio,
-                                y: f64::from(js_event.offset_y()) * instance.device_pixel_ratio,
-                            };
-                            instance.core.lock().unwrap().handle_event(event);
-                            if instance.has_focus {
-                                js_event.prevent_default();
-                            }
-                        }
+            let mouse_move_callback = Closure::wrap(Box::new(move |js_event: PointerEvent| {
+                let _ = ruffle.with_instance(move |instance| {
+                    let event = PlayerEvent::MouseMove {
+                        x: f64::from(js_event.offset_x()) * instance.device_pixel_ratio,
+                        y: f64::from(js_event.offset_y()) * instance.device_pixel_ratio,
+                    };
+                    let _ = instance.with_core_mut(|core| {
+                        core.handle_event(event);
                     });
-                })
-                    as Box<dyn FnMut(PointerEvent)>);
+                    if instance.has_focus {
+                        js_event.prevent_default();
+                    }
+                });
+            }) as Box<dyn FnMut(PointerEvent)>);
 
-                let canvas_events: &EventTarget = canvas.as_ref();
-                canvas_events
-                    .add_event_listener_with_callback(
-                        "pointermove",
-                        mouse_move_callback.as_ref().unchecked_ref(),
-                    )
-                    .unwrap();
-                let instance = instances.get(index).unwrap();
-                instance.borrow_mut().mouse_move_callback = Some(mouse_move_callback);
-            }
+            let canvas_events: &EventTarget = canvas.as_ref();
+            canvas_events
+                .add_event_listener_with_callback(
+                    "pointermove",
+                    mouse_move_callback.as_ref().unchecked_ref(),
+                )
+                .warn_on_error();
+
+            instance.mouse_move_callback = Some(mouse_move_callback);
 
             // Create mouse down handler.
-            {
-                let mouse_down_callback = Closure::wrap(Box::new(move |js_event: PointerEvent| {
-                    INSTANCES.with(move |instances| {
-                        let instances = instances.borrow();
-                        if let Some(instance) = instances.get(index) {
-                            // Only fire player mouse event for left clicks.
-                            if js_event.button() == 0 {
-                                if let Some(target) = js_event.current_target() {
-                                    let _ = target
-                                        .unchecked_ref::<Element>()
-                                        .set_pointer_capture(js_event.pointer_id());
-                                }
-                                let device_pixel_ratio = instance.borrow().device_pixel_ratio;
-                                let event = PlayerEvent::MouseDown {
-                                    x: f64::from(js_event.offset_x()) * device_pixel_ratio,
-                                    y: f64::from(js_event.offset_y()) * device_pixel_ratio,
-                                };
-                                instance.borrow().core.lock().unwrap().handle_event(event);
-                            }
+            let mouse_down_callback = Closure::wrap(Box::new(move |js_event: PointerEvent| {
+                let _ = ruffle.with_instance(move |instance| {
+                    // Only fire player mouse event for left clicks.
+                    if js_event.button() == 0 {
+                        if let Some(target) = js_event.current_target() {
+                            let _ = target
+                                .unchecked_ref::<Element>()
+                                .set_pointer_capture(js_event.pointer_id());
+                        }
+                        let device_pixel_ratio = instance.device_pixel_ratio;
+                        let event = PlayerEvent::MouseDown {
+                            x: f64::from(js_event.offset_x()) * device_pixel_ratio,
+                            y: f64::from(js_event.offset_y()) * device_pixel_ratio,
+                        };
+                        let _ = instance.with_core_mut(|core| {
+                            core.handle_event(event);
+                        });
+                    }
 
+                    js_event.prevent_default();
+                });
+            }) as Box<dyn FnMut(PointerEvent)>);
+
+            let canvas_events: &EventTarget = canvas.as_ref();
+            canvas_events
+                .add_event_listener_with_callback(
+                    "pointerdown",
+                    mouse_down_callback.as_ref().unchecked_ref(),
+                )
+                .warn_on_error();
+            instance.mouse_down_callback = Some(mouse_down_callback);
+
+            // Create player mouse down handler.
+            let window2 = window.clone();
+            let player_mouse_down_callback =
+                Closure::wrap(Box::new(move |_js_event: PointerEvent| {
+                    let _ = ruffle.with_instance_mut(|instance| {
+                        instance.has_focus = true;
+                        // Ensure the parent window gets focus. This is necessary for events
+                        // to be received when the player is inside a frame.
+                        let _ = window2.focus();
+                    });
+                }) as Box<dyn FnMut(PointerEvent)>);
+
+            let js_player_events: &EventTarget = js_player.as_ref();
+            js_player_events
+                .add_event_listener_with_callback(
+                    "pointerdown",
+                    player_mouse_down_callback.as_ref().unchecked_ref(),
+                )
+                .warn_on_error();
+            instance.player_mouse_down_callback = Some(player_mouse_down_callback);
+
+            // Create window mouse down handler.
+            let window_mouse_down_callback =
+                Closure::wrap(Box::new(move |_js_event: PointerEvent| {
+                    let _ = ruffle.with_instance_mut(|instance| {
+                        // If we actually clicked on the player, this will be reset to true
+                        // after the event bubbles down to the player.
+                        instance.has_focus = false;
+                    });
+                }) as Box<dyn FnMut(PointerEvent)>);
+
+            window
+                .add_event_listener_with_callback_and_bool(
+                    "pointerdown",
+                    window_mouse_down_callback.as_ref().unchecked_ref(),
+                    true, // Use capture so this first *before* the player mouse down handler.
+                )
+                .warn_on_error();
+            instance.window_mouse_down_callback = Some(window_mouse_down_callback);
+
+            // Create mouse up handler.
+            let mouse_up_callback = Closure::wrap(Box::new(move |js_event: PointerEvent| {
+                let _ = ruffle.with_instance_mut(|instance| {
+                    // Only fire player mouse event for left clicks.
+                    if js_event.button() == 0 {
+                        if let Some(target) = js_event.current_target() {
+                            let _ = target
+                                .unchecked_ref::<Element>()
+                                .release_pointer_capture(js_event.pointer_id());
+                        }
+                        let event = PlayerEvent::MouseUp {
+                            x: f64::from(js_event.offset_x()) * instance.device_pixel_ratio,
+                            y: f64::from(js_event.offset_y()) * instance.device_pixel_ratio,
+                        };
+                        let _ = instance.with_core_mut(|core| {
+                            core.handle_event(event);
+                        });
+                    }
+
+                    if instance.has_focus {
+                        js_event.prevent_default();
+                    }
+                });
+            }) as Box<dyn FnMut(PointerEvent)>);
+
+            let canvas_events: &EventTarget = canvas.as_ref();
+            canvas_events
+                .add_event_listener_with_callback(
+                    "pointerup",
+                    mouse_up_callback.as_ref().unchecked_ref(),
+                )
+                .warn_on_error();
+            instance.mouse_up_callback = Some(mouse_up_callback);
+
+            // Create mouse wheel handler.
+            let mouse_wheel_callback = Closure::wrap(Box::new(move |js_event: WheelEvent| {
+                let _ = ruffle.with_instance(|instance| {
+                    let delta = match js_event.delta_mode() {
+                        WheelEvent::DOM_DELTA_LINE => MouseWheelDelta::Lines(-js_event.delta_y()),
+                        WheelEvent::DOM_DELTA_PIXEL => MouseWheelDelta::Pixels(-js_event.delta_y()),
+                        _ => return,
+                    };
+                    let _ = instance.with_core_mut(|core| {
+                        core.handle_event(PlayerEvent::MouseWheel { delta });
+                        if core.should_prevent_scrolling() {
                             js_event.prevent_default();
                         }
                     });
-                })
-                    as Box<dyn FnMut(PointerEvent)>);
+                });
+            }) as Box<dyn FnMut(WheelEvent)>);
 
-                let canvas_events: &EventTarget = canvas.as_ref();
-                canvas_events
-                    .add_event_listener_with_callback(
-                        "pointerdown",
-                        mouse_down_callback.as_ref().unchecked_ref(),
-                    )
-                    .unwrap();
-                let instance = instances.get(index).unwrap();
-                instance.borrow_mut().mouse_down_callback = Some(mouse_down_callback);
-            }
-
-            // Create player mouse down handler.
-            {
-                let window = window.clone();
-                let player_mouse_down_callback =
-                    Closure::wrap(Box::new(move |_js_event: PointerEvent| {
-                        INSTANCES.with(|instances| {
-                            let instances = instances.borrow();
-                            if let Some(instance) = instances.get(index) {
-                                instance.borrow_mut().has_focus = true;
-                                // Ensure the parent window gets focus. This is necessary for events
-                                // to be received when the player is inside a frame.
-                                let _ = window.focus();
-                            }
-                        });
-                    }) as Box<dyn FnMut(PointerEvent)>);
-
-                let js_player_events: &EventTarget = js_player.as_ref();
-                js_player_events
-                    .add_event_listener_with_callback(
-                        "pointerdown",
-                        player_mouse_down_callback.as_ref().unchecked_ref(),
-                    )
-                    .unwrap();
-                let instance = instances.get(index).unwrap();
-                instance.borrow_mut().player_mouse_down_callback = Some(player_mouse_down_callback);
-            }
-
-            // Create window mouse down handler.
-            {
-                let window_mouse_down_callback =
-                    Closure::wrap(Box::new(move |_js_event: PointerEvent| {
-                        INSTANCES.with(|instances| {
-                            let instances = instances.borrow();
-                            if let Some(instance) = instances.get(index) {
-                                // If we actually clicked on the player, this will be reset to true
-                                // after the event bubbles down to the player.
-                                instance.borrow_mut().has_focus = false;
-                            }
-                        });
-                    }) as Box<dyn FnMut(PointerEvent)>);
-
-                window
-                    .add_event_listener_with_callback_and_bool(
-                        "pointerdown",
-                        window_mouse_down_callback.as_ref().unchecked_ref(),
-                        true, // Use capture so this first *before* the player mouse down handler.
-                    )
-                    .unwrap();
-                let instance = instances.get(index).unwrap();
-                instance.borrow_mut().window_mouse_down_callback = Some(window_mouse_down_callback);
-            }
-
-            // Create mouse up handler.
-            {
-                let mouse_up_callback = Closure::wrap(Box::new(move |js_event: PointerEvent| {
-                    INSTANCES.with(move |instances| {
-                        let instances = instances.borrow();
-                        if let Some(instance) = instances.get(index) {
-                            let instance = instance.borrow();
-
-                            // Only fire player mouse event for left clicks.
-                            if js_event.button() == 0 {
-                                if let Some(target) = js_event.current_target() {
-                                    let _ = target
-                                        .unchecked_ref::<Element>()
-                                        .release_pointer_capture(js_event.pointer_id());
-                                }
-                                let event = PlayerEvent::MouseUp {
-                                    x: f64::from(js_event.offset_x()) * instance.device_pixel_ratio,
-                                    y: f64::from(js_event.offset_y()) * instance.device_pixel_ratio,
-                                };
-                                instance.core.lock().unwrap().handle_event(event);
-                            }
-
-                            if instance.has_focus {
-                                js_event.prevent_default();
-                            }
-                        }
-                    });
-                })
-                    as Box<dyn FnMut(PointerEvent)>);
-
-                let canvas_events: &EventTarget = canvas.as_ref();
-                canvas_events
-                    .add_event_listener_with_callback(
-                        "pointerup",
-                        mouse_up_callback.as_ref().unchecked_ref(),
-                    )
-                    .unwrap();
-                let instance = instances.get(index).unwrap();
-                instance.borrow_mut().mouse_up_callback = Some(mouse_up_callback);
-            }
-
-            // Create mouse wheel handler.
-            {
-                let mouse_wheel_callback = Closure::wrap(Box::new(move |js_event: WheelEvent| {
-                    INSTANCES.with(move |instances| {
-                        let instances = instances.borrow();
-                        if let Some(instance) = instances.get(index) {
-                            let delta = match js_event.delta_mode() {
-                                WheelEvent::DOM_DELTA_LINE => {
-                                    MouseWheelDelta::Lines(-js_event.delta_y())
-                                }
-                                WheelEvent::DOM_DELTA_PIXEL => {
-                                    MouseWheelDelta::Pixels(-js_event.delta_y())
-                                }
-                                _ => return,
-                            };
-                            let core = &instance.borrow().core;
-                            let mut core_lock = core.lock().unwrap();
-                            core_lock.handle_event(PlayerEvent::MouseWheel { delta });
-                            if core_lock.should_prevent_scrolling() {
-                                js_event.prevent_default();
-                            }
-                        }
-                    });
-                })
-                    as Box<dyn FnMut(WheelEvent)>);
-
-                let canvas_events: &EventTarget = canvas.as_ref();
-                let mut options = AddEventListenerOptions::new();
-                options.passive(false);
-                canvas_events
-                    .add_event_listener_with_callback_and_add_event_listener_options(
-                        "wheel",
-                        mouse_wheel_callback.as_ref().unchecked_ref(),
-                        &options,
-                    )
-                    .unwrap();
-                let instance = instances.get(index).unwrap();
-                instance.borrow_mut().mouse_wheel_callback = Some(mouse_wheel_callback);
-            }
+            let canvas_events: &EventTarget = canvas.as_ref();
+            let mut options = AddEventListenerOptions::new();
+            options.passive(false);
+            canvas_events
+                .add_event_listener_with_callback_and_add_event_listener_options(
+                    "wheel",
+                    mouse_wheel_callback.as_ref().unchecked_ref(),
+                    &options,
+                )
+                .warn_on_error();
+            instance.mouse_wheel_callback = Some(mouse_wheel_callback);
 
             // Create keydown event handler.
-            {
-                let key_down_callback = Closure::wrap(Box::new(move |js_event: KeyboardEvent| {
-                    INSTANCES.with(|instances| {
-                        if let Some(instance) = instances.borrow().get(index) {
-                            let instance = instance.borrow();
-                            if instance.has_focus {
-                                let mut core = instance.core.lock().unwrap();
-                                let ui = core.ui_mut().downcast_mut::<ui::WebUiBackend>().unwrap();
-                                ui.keydown(&js_event);
+            let key_down_callback = Closure::wrap(Box::new(move |js_event: KeyboardEvent| {
+                let _ = ruffle.with_instance(|instance| {
+                    if instance.has_focus {
+                        let _ = instance.with_core_mut(|core| {
+                            let ui = if let Some(ui) =
+                                core.ui_mut().downcast_mut::<ui::WebUiBackend>()
+                            {
+                                ui
+                            } else {
+                                return;
+                            };
+                            ui.keydown(&js_event);
 
-                                let key_code = ui.last_key_code();
-                                let key_char = ui.last_key_char();
+                            let key_code = ui.last_key_code();
+                            let key_char = ui.last_key_char();
 
-                                if key_code != KeyCode::Unknown {
-                                    core.handle_event(PlayerEvent::KeyDown { key_code });
-                                }
-
-                                if let Some(codepoint) = key_char {
-                                    core.handle_event(PlayerEvent::TextInput { codepoint });
-                                }
-
-                                js_event.prevent_default();
+                            if key_code != KeyCode::Unknown {
+                                core.handle_event(PlayerEvent::KeyDown { key_code });
                             }
-                        }
-                    });
-                })
-                    as Box<dyn FnMut(KeyboardEvent)>);
 
-                window
-                    .add_event_listener_with_callback(
-                        "keydown",
-                        key_down_callback.as_ref().unchecked_ref(),
-                    )
-                    .unwrap();
-                let instance = instances.get(index).unwrap();
-                instance.borrow_mut().key_down_callback = Some(key_down_callback);
-            }
+                            if let Some(codepoint) = key_char {
+                                core.handle_event(PlayerEvent::TextInput { codepoint });
+                            }
+                        });
+
+                        js_event.prevent_default();
+                    }
+                });
+            }) as Box<dyn FnMut(KeyboardEvent)>);
+
+            window
+                .add_event_listener_with_callback(
+                    "keydown",
+                    key_down_callback.as_ref().unchecked_ref(),
+                )
+                .warn_on_error();
+            instance.key_down_callback = Some(key_down_callback);
 
             // Create keyup event handler.
-            {
-                let key_up_callback = Closure::wrap(Box::new(move |js_event: KeyboardEvent| {
-                    js_event.prevent_default();
-                    INSTANCES.with(|instances| {
-                        if let Some(instance) = instances.borrow().get(index) {
-                            let instance = instance.borrow();
-                            if instance.has_focus {
-                                let mut core = instance.core.lock().unwrap();
-                                let ui = core.ui_mut().downcast_mut::<ui::WebUiBackend>().unwrap();
-                                ui.keyup(&js_event);
+            let key_up_callback = Closure::wrap(Box::new(move |js_event: KeyboardEvent| {
+                let _ = ruffle.with_instance(|instance| {
+                    if instance.has_focus {
+                        js_event.prevent_default();
+                        let _ = instance.with_core_mut(|core| {
+                            let ui = if let Some(ui) =
+                                core.ui_mut().downcast_mut::<ui::WebUiBackend>()
+                            {
+                                ui
+                            } else {
+                                return;
+                            };
+                            ui.keyup(&js_event);
 
-                                let key_code = ui.last_key_code();
-                                if key_code != KeyCode::Unknown {
-                                    core.handle_event(PlayerEvent::KeyUp { key_code });
-                                }
-
-                                js_event.prevent_default();
+                            let key_code = ui.last_key_code();
+                            if key_code != KeyCode::Unknown {
+                                core.handle_event(PlayerEvent::KeyUp { key_code });
                             }
-                        }
-                    });
-                })
-                    as Box<dyn FnMut(KeyboardEvent)>);
+                        });
+                    }
+                });
+            }) as Box<dyn FnMut(KeyboardEvent)>);
 
-                window
-                    .add_event_listener_with_callback(
-                        "keyup",
-                        key_up_callback.as_ref().unchecked_ref(),
-                    )
-                    .unwrap();
-                let mut instance = instances.get(index).unwrap().borrow_mut();
-                instance.key_up_callback = Some(key_up_callback);
-            }
+            window
+                .add_event_listener_with_callback("keyup", key_up_callback.as_ref().unchecked_ref())
+                .warn_on_error();
+            instance.key_up_callback = Some(key_up_callback);
 
-            {
-                let unload_callback = Closure::wrap(Box::new(move |_| {
-                    INSTANCES.with(|instances| {
-                        if let Some(instance) = instances.borrow().get(index) {
-                            let instance = instance.borrow();
-                            let mut player = instance.core.lock().unwrap();
-                            player.flush_shared_objects();
-                        }
-                    });
-                }) as Box<dyn FnMut(Event)>);
+            let unload_callback = Closure::wrap(Box::new(move |_| {
+                let _ = ruffle.with_core_mut(|core| {
+                    core.flush_shared_objects();
+                });
+            }) as Box<dyn FnMut(Event)>);
 
-                window
-                    .add_event_listener_with_callback(
-                        "unload",
-                        unload_callback.as_ref().unchecked_ref(),
-                    )
-                    .unwrap();
-                let mut instance = instances.get(index).unwrap().borrow_mut();
-                instance.unload_callback = Some(unload_callback);
-            }
-
-            ruffle
-        });
+            window
+                .add_event_listener_with_callback(
+                    "unload",
+                    unload_callback.as_ref().unchecked_ref(),
+                )
+                .warn_on_error();
+            instance.unload_callback = Some(unload_callback);
+        })?;
 
         // Set initial timestamp and do initial tick to start animation loop.
         ruffle.tick(0.0);
@@ -930,93 +827,185 @@ impl Ruffle {
         Ok(ruffle)
     }
 
-    fn tick(&mut self, timestamp: f64) {
-        INSTANCES.with(|instances| {
-            let instances = instances.borrow();
+    /// Registers a new Ruffle instance and returns the handle to the instance.
+    fn add_instance(instance: RuffleInstance) -> Result<Ruffle, RuffleInstanceError> {
+        INSTANCES.try_with(|instances| {
+            let mut instances = instances.try_borrow_mut()?;
+            let ruffle = Ruffle(instances.insert(RefCell::new(instance)));
+            Ok(ruffle)
+        })?
+    }
+
+    /// Unregisters a Ruffle instance, and returns the removed instance.
+    fn remove_instance(&self) -> Result<RuffleInstance, RuffleInstanceError> {
+        INSTANCES.try_with(|instances| {
+            let mut instances = instances.try_borrow_mut()?;
+            if let Some(instance) = instances.remove(self.0) {
+                Ok(instance.into_inner())
+            } else {
+                Err(RuffleInstanceError::InstanceNotFound)
+            }
+        })?
+    }
+
+    /// Runs the given function on this Ruffle instance.
+    fn with_instance<F, O>(&self, f: F) -> Result<O, RuffleInstanceError>
+    where
+        F: FnOnce(&RuffleInstance) -> O,
+    {
+        INSTANCES.try_with(|instances| {
+            let instances = instances.try_borrow()?;
             if let Some(instance) = instances.get(self.0) {
-                let window = web_sys::window().unwrap();
+                let instance = instance.try_borrow()?;
+                Ok(f(&*instance))
+            } else {
+                Err(RuffleInstanceError::InstanceNotFound)
+            }
+        })?
+    }
 
-                let mut mut_instance = instance.borrow_mut();
-                // Calculate the dt from last tick.
-                let dt = if let Some(prev_timestamp) = mut_instance.timestamp {
-                    mut_instance.timestamp = Some(timestamp);
-                    timestamp - prev_timestamp
-                } else {
-                    // Store the timestamp from the initial tick.
-                    // (I tried to use Performance.now() to get the initial timestamp,
-                    // but this didn't seem to be accurate and caused negative dts on
-                    // Chrome.)
-                    mut_instance.timestamp = Some(timestamp);
-                    0.0
-                };
-                drop(mut_instance);
+    /// Runs the given function on this Ruffle instance.
+    fn with_instance_mut<F, O>(&self, f: F) -> Result<O, RuffleInstanceError>
+    where
+        F: FnOnce(&mut RuffleInstance) -> O,
+    {
+        INSTANCES.try_with(|instances| {
+            let instances = instances.try_borrow()?;
+            if let Some(instance) = instances.get(self.0) {
+                let mut instance = instance.try_borrow_mut()?;
+                Ok(f(&mut *instance))
+            } else {
+                Err(RuffleInstanceError::InstanceNotFound)
+            }
+        })?
+    }
 
-                let core = instance.borrow().core.clone();
-                let mut core_lock = core.lock().unwrap();
-                core_lock.tick(dt);
-                let mut needs_render = core_lock.needs_render();
+    /// Runs the given function on this instance's `Player`.
+    fn with_core<F, O>(&self, f: F) -> Result<O, RuffleInstanceError>
+    where
+        F: FnOnce(&ruffle_core::Player) -> O,
+    {
+        INSTANCES.try_with(|instances| {
+            let instances = instances.try_borrow()?;
+            if let Some(instance) = instances.get(self.0) {
+                let instance = instance.try_borrow()?;
+                instance.with_core(f)
+            } else {
+                Err(RuffleInstanceError::InstanceNotFound)
+            }
+        })?
+    }
 
+    /// Runs the given function on this instance's `Player`.
+    fn with_core_mut<F, O>(&self, f: F) -> Result<O, RuffleInstanceError>
+    where
+        F: FnOnce(&mut ruffle_core::Player) -> O,
+    {
+        INSTANCES.try_with(|instances| {
+            let instances = instances.try_borrow()?;
+            if let Some(instance) = instances.get(self.0) {
+                let instance = instance.try_borrow()?;
+                instance.with_core_mut(f)
+            } else {
+                Err(RuffleInstanceError::InstanceNotFound)
+            }
+        })?
+    }
+
+    fn tick(&mut self, timestamp: f64) {
+        let window = if let Some(window) = web_sys::window() {
+            window
+        } else {
+            return;
+        };
+
+        let (canvas, dt) = if let Ok(instance_data) = self.with_instance_mut(|instance| {
+            // Calculate the dt from last tick.
+            let dt = if let Some(prev_timestamp) = instance.timestamp {
+                instance.timestamp = Some(timestamp);
+                timestamp - prev_timestamp
+            } else {
+                // Store the timestamp from the initial tick.
+                // (I tried to use Performance.now() to get the initial timestamp,
+                // but this didn't seem to be accurate and caused negative dts on
+                // Chrome.)
+                instance.timestamp = Some(timestamp);
+                0.0
+            };
+            (instance.canvas.clone(), dt)
+        }) {
+            instance_data
+        } else {
+            return;
+        };
+
+        let mut needs_render = self
+            .with_core_mut(|core| {
+                core.tick(dt);
+                core.needs_render()
+            })
+            .unwrap_or_default();
+
+        let new_dimensions = self
+            .with_instance_mut(|instance| {
                 // Check for canvas resize.
-                let canvas = instance.borrow().canvas.to_owned();
                 let canvas_width = canvas.client_width();
                 let canvas_height = canvas.client_height();
                 let device_pixel_ratio = window.device_pixel_ratio(); // Changes via user zooming.
-                if instance.borrow().canvas_width != canvas_width
-                    || instance.borrow().canvas_height != canvas_height
-                    || (instance.borrow().device_pixel_ratio - device_pixel_ratio).abs()
-                        >= f64::EPSILON
+                if instance.canvas_width != canvas_width
+                    || instance.canvas_height != canvas_height
+                    || (instance.device_pixel_ratio - device_pixel_ratio).abs() >= f64::EPSILON
                 {
-                    let mut mut_instance = instance.borrow_mut();
                     // If a canvas resizes, its drawing context will get scaled. You must reset
                     // the width and height attributes of the canvas element to recreate the context.
                     // (NOT the CSS width/height!)
-                    mut_instance.canvas_width = canvas_width;
-                    mut_instance.canvas_height = canvas_height;
-                    mut_instance.device_pixel_ratio = device_pixel_ratio;
-                    drop(mut_instance);
+                    instance.canvas_width = canvas_width;
+                    instance.canvas_height = canvas_height;
+                    instance.device_pixel_ratio = device_pixel_ratio;
 
                     // The actual viewport is scaled by DPI, bigger than CSS pixels.
                     let viewport_width = (f64::from(canvas_width) * device_pixel_ratio) as u32;
                     let viewport_height = (f64::from(canvas_height) * device_pixel_ratio) as u32;
-                    canvas.set_width(viewport_width);
-                    canvas.set_height(viewport_height);
-
-                    core_lock.set_viewport_dimensions(
-                        viewport_width,
-                        viewport_height,
-                        device_pixel_ratio,
-                    );
-                    core_lock
-                        .renderer_mut()
-                        .set_viewport_dimensions(viewport_width, viewport_height);
 
                     // Force a re-render if we resize.
                     needs_render = true;
-                }
 
-                if needs_render {
-                    core_lock.render();
-                }
-
-                // Request next animation frame.
-                let mut instance = instance.borrow_mut();
-                if let Some(handler) = &instance.animation_handler {
-                    let window = web_sys::window().unwrap();
-                    let id = window
-                        .request_animation_frame(handler.as_ref().unchecked_ref())
-                        .unwrap();
-                    instance.animation_handler_id = NonZeroI32::new(id);
+                    Some((viewport_width, viewport_height, device_pixel_ratio))
                 } else {
-                    instance.animation_handler_id = None;
+                    None
                 }
+            })
+            .unwrap_or_default();
+
+        let _ = self.with_core_mut(|core| {
+            if let Some((viewport_width, viewport_height, device_pixel_ratio)) = new_dimensions {
+                canvas.set_width(viewport_width);
+                canvas.set_height(viewport_height);
+
+                core.set_viewport_dimensions(viewport_width, viewport_height, device_pixel_ratio);
+                core.renderer_mut()
+                    .set_viewport_dimensions(viewport_width, viewport_height);
+            }
+            if needs_render {
+                core.render();
+            }
+        });
+
+        // Request next animation frame.
+        let _ = self.with_instance_mut(|instance| {
+            if let Some(handler) = &instance.animation_handler {
+                let id = window
+                    .request_animation_frame(handler.as_ref().unchecked_ref())
+                    .unwrap_or_default();
+                instance.animation_handler_id = NonZeroI32::new(id);
+            } else {
+                instance.animation_handler_id = None;
             }
         });
     }
 
     fn on_metadata(&self, swf_header: &ruffle_core::swf::Header) {
-        INSTANCES.with(|instances| {
-            let instances = instances.borrow();
-            let instance = instances.get(self.0).unwrap().borrow();
+        let _ = self.with_instance(|instance| {
             let width = swf_header.stage_size.x_max - swf_header.stage_size.x_min;
             let height = swf_header.stage_size.y_max - swf_header.stage_size.y_min;
             let metadata = MovieMetadata {
@@ -1027,11 +1016,49 @@ impl Ruffle {
                 swf_version: swf_header.version,
             };
 
-            instance
-                .js_player
-                .set_metadata(JsValue::from_serde(&metadata).unwrap());
-        })
+            if let Ok(value) = JsValue::from_serde(&metadata) {
+                instance.js_player.set_metadata(value);
+            }
+        });
     }
+}
+
+impl RuffleInstance {
+    fn with_core<F, O>(&self, f: F) -> Result<O, RuffleInstanceError>
+    where
+        F: FnOnce(&ruffle_core::Player) -> O,
+    {
+        let mut core = self
+            .core
+            .try_lock()
+            .map_err(|_| RuffleInstanceError::TryLockError)?;
+        Ok(f(&*core))
+    }
+
+    fn with_core_mut<F, O>(&self, f: F) -> Result<O, RuffleInstanceError>
+    where
+        F: FnOnce(&mut ruffle_core::Player) -> O,
+    {
+        let mut core = self
+            .core
+            .try_lock()
+            .map_err(|_| RuffleInstanceError::TryLockError)?;
+        Ok(f(&mut *core))
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum RuffleInstanceError {
+    #[error("Unable to access INSTANCES threadlocal")]
+    ThreadLocalAccessError(#[from] std::thread::AccessError),
+    #[error("Unable to mutably borrow Ruffle instance")]
+    CannotBorrow(#[from] std::cell::BorrowError),
+    #[error("Unable to borrow Ruffle instance")]
+    CannotBorrowMut(#[from] std::cell::BorrowMutError),
+    #[error("Unable to lock Ruffle core")]
+    TryLockError,
+    #[error("Ruffle Instance ID does not exist")]
+    InstanceNotFound,
 }
 
 struct JavascriptMethod {
