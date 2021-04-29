@@ -7,6 +7,7 @@ pub enum GraphicsBackend {
     Metal,
     Dx12,
     Dx11,
+    Gl,
 }
 
 impl From<GraphicsBackend> for wgpu::BackendBit {
@@ -17,6 +18,7 @@ impl From<GraphicsBackend> for wgpu::BackendBit {
             GraphicsBackend::Metal => wgpu::BackendBit::METAL,
             GraphicsBackend::Dx12 => wgpu::BackendBit::DX12,
             GraphicsBackend::Dx11 => wgpu::BackendBit::DX11,
+            GraphicsBackend::Gl => wgpu::BackendBit::GL,
         }
     }
 }
