@@ -127,8 +127,8 @@ jobs:
       - name: Set SDK for macOS aarch64
         if: matrix.target == 'aarch64-apple-darwin'
         run: |
+          echo "SDKPATH=`xcrun --sdk macosx11.1 --show-sdk-path`" >> $GITHUB_ENV
           sudo xcode-select -s "/Applications/Xcode_12.4.app"
-          sudo rm -Rf /Library/Developer/CommandLineTools/SDKs/*
 
       - name: Cargo build
         uses: actions-rs/cargo@v1
