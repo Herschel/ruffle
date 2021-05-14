@@ -51,50 +51,50 @@ struct GcRoot<'gc>(GcCell<'gc, GcRootData<'gc>>);
 
 #[derive(Collect)]
 #[collect(no_drop)]
-struct GcRootData<'gc> {
-    library: Library<'gc>,
+pub(crate) struct GcRootData<'gc> {
+    pub library: Library<'gc>,
 
     /// The root of the display object hierarchy.
     ///
     /// It's children are the `level`s of AVM1, it may also be directly
     /// accessed in AVM2.
-    stage: Stage<'gc>,
+    pub stage: Stage<'gc>,
 
-    mouse_hovered_object: Option<DisplayObject<'gc>>, // TODO: Remove GcCell wrapped inside GcCell.
+    pub mouse_hovered_object: Option<DisplayObject<'gc>>, // TODO: Remove GcCell wrapped inside GcCell.
 
     /// The object being dragged via a `startDrag` action.
-    drag_object: Option<DragObject<'gc>>,
+    pub drag_object: Option<DragObject<'gc>>,
 
     /// Interpreter state for AVM1 code.
-    avm1: Avm1<'gc>,
+    pub avm1: Avm1<'gc>,
 
     /// Interpreter state for AVM2 code.
-    avm2: Avm2<'gc>,
+    pub avm2: Avm2<'gc>,
 
-    action_queue: ActionQueue<'gc>,
+    pub action_queue: ActionQueue<'gc>,
 
     /// Object which manages asynchronous processes that need to interact with
     /// data in the GC arena.
-    load_manager: LoadManager<'gc>,
+    pub load_manager: LoadManager<'gc>,
 
-    shared_objects: HashMap<String, Object<'gc>>,
+    pub shared_objects: HashMap<String, Object<'gc>>,
 
     /// Text fields with unbound variable bindings.
-    unbound_text_fields: Vec<EditText<'gc>>,
+    pub unbound_text_fields: Vec<EditText<'gc>>,
 
     /// Timed callbacks created with `setInterval`/`setTimeout`.
-    timers: Timers<'gc>,
+    pub timers: Timers<'gc>,
 
-    current_context_menu: Option<ContextMenuState<'gc>>,
+    pub current_context_menu: Option<ContextMenuState<'gc>>,
 
     /// External interface for (for example) JavaScript <-> ActionScript interaction
-    external_interface: ExternalInterface<'gc>,
+    pub external_interface: ExternalInterface<'gc>,
 
     /// A tracker for the current keyboard focused element
-    focus_tracker: FocusTracker<'gc>,
+    pub focus_tracker: FocusTracker<'gc>,
 
     /// Manager of active sound instances.
-    audio_manager: AudioManager<'gc>,
+    pub audio_manager: AudioManager<'gc>,
 }
 
 impl<'gc> GcRootData<'gc> {
@@ -149,6 +149,11 @@ type Ui = Box<dyn UiBackend>;
 type Video = Box<dyn VideoBackend>;
 
 pub struct Player {
+    data: PlayerData,
+    gc_arena: GcArena,
+}
+
+pub(crate) struct PlayerData {
     /// The version of the player we're emulating.
     ///
     /// This serves a few purposes, primarily for compatibility:
@@ -159,70 +164,68 @@ pub struct Player {
     ///   digits. This allows the user to play those old files.
     /// * Player-specific behavior that was not properly versioned in Flash
     ///   Player can be enabled by setting a particular player version.
-    player_version: u8,
+    pub player_version: u8,
 
-    swf: Arc<SwfMovie>,
+    pub swf: Arc<SwfMovie>,
 
-    warn_on_unsupported_content: bool,
+    pub warn_on_unsupported_content: bool,
 
-    is_playing: bool,
-    needs_render: bool,
+    pub is_playing: bool,
+    pub needs_render: bool,
 
-    renderer: Renderer,
+    pub renderer: Renderer,
     audio: Audio,
-    navigator: Navigator,
-    storage: Storage,
-    locale: Locale,
-    log: Log,
-    ui: Ui,
-    video: Video,
+    pub navigator: Navigator,
+    pub storage: Storage,
+    pub locale: Locale,
+    pub log: Log,
+    pub ui: Ui,
+    pub video: Video,
 
-    transform_stack: TransformStack,
+    pub transform_stack: TransformStack,
 
-    rng: SmallRng,
+    pub rng: SmallRng,
 
-    gc_arena: GcArena,
-
-    frame_rate: f64,
+    pub frame_rate: f64,
 
     /// A time budget for executing frames.
     /// Gained by passage of time between host frames, spent by executing SWF frames.
     /// This is how we support custom SWF framerates
     /// and compensate for small lags by "catching up" (up to MAX_FRAMES_PER_TICK).
-    frame_accumulator: f64,
-    recent_run_frame_timings: VecDeque<f64>,
+    pub frame_accumulator: f64,
+    pub recent_run_frame_timings: VecDeque<f64>,
 
     /// Faked time passage for fooling hand-written busy-loop FPS limiters.
-    time_offset: u32,
+    pub time_offset: u32,
 
-    mouse_pos: (Twips, Twips),
-    is_mouse_down: bool,
+    pub mouse_pos: (Twips, Twips),
+    pub is_mouse_down: bool,
 
     /// The current mouse cursor icon.
-    mouse_cursor: MouseCursor,
+    pub mouse_cursor: MouseCursor,
 
-    system: SystemProperties,
+    pub system: SystemProperties,
 
     /// The current instance ID. Used to generate default `instanceN` names.
-    instance_counter: i32,
+    pub instance_counter: i32,
 
     /// Time remaining until the next timer will fire.
-    time_til_next_timer: Option<f64>,
+    pub time_til_next_timer: Option<f64>,
 
     /// The maximum amount of time that can be called before a `Error::ExecutionTimeout`
     /// is raised. This defaults to 15 seconds but can be changed.
-    max_execution_duration: Duration,
+    pub max_execution_duration: Duration,
 
     /// Self-reference to ourselves.
     ///
     /// This is a weak reference that is upgraded and handed out in various
     /// contexts to other parts of the player. It can be used to ensure the
     /// player lives across `await` calls in async code.
-    self_reference: Option<Weak<Mutex<Self>>>,
+    pub self_reference: Option<Weak<Mutex<Self>>>,
 
     /// The current frame of the main timeline, if available.
     /// The first frame is frame 1.
-    current_frame: Option<u16>,
+    pub current_frame: Option<u16>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -245,7 +248,30 @@ impl Player {
         // Disable script timeout in debug builds by default.
         let max_execution_duration = if cfg!(debug_assertions) { u64::MAX } else { 15 };
 
-        let mut player = Player {
+        let gc_arena = GcArena::new(ArenaParameters::default(), |gc_context| {
+            GcRoot(GcCell::allocate(
+                gc_context,
+                GcRootData {
+                    library: Library::empty(gc_context),
+                    stage: Stage::empty(gc_context, movie_width, movie_height),
+                    mouse_hovered_object: None,
+                    drag_object: None,
+                    avm1: Avm1::new(gc_context, NEWEST_PLAYER_VERSION),
+                    avm2: Avm2::new(gc_context),
+                    action_queue: ActionQueue::new(),
+                    load_manager: LoadManager::new(),
+                    shared_objects: HashMap::new(),
+                    unbound_text_fields: Vec::new(),
+                    timers: Timers::new(),
+                    current_context_menu: None,
+                    external_interface: ExternalInterface::new(),
+                    focus_tracker: FocusTracker::new(gc_context),
+                    audio_manager: AudioManager::new(),
+                },
+            ))
+        });
+
+        let mut data = PlayerData {
             player_version: NEWEST_PLAYER_VERSION,
 
             swf: fake_movie.clone(),
@@ -258,29 +284,6 @@ impl Player {
             transform_stack: TransformStack::new(),
 
             rng: SmallRng::seed_from_u64(chrono::Utc::now().timestamp_millis() as u64),
-
-            gc_arena: GcArena::new(ArenaParameters::default(), |gc_context| {
-                GcRoot(GcCell::allocate(
-                    gc_context,
-                    GcRootData {
-                        library: Library::empty(gc_context),
-                        stage: Stage::empty(gc_context, movie_width, movie_height),
-                        mouse_hovered_object: None,
-                        drag_object: None,
-                        avm1: Avm1::new(gc_context, NEWEST_PLAYER_VERSION),
-                        avm2: Avm2::new(gc_context),
-                        action_queue: ActionQueue::new(),
-                        load_manager: LoadManager::new(),
-                        shared_objects: HashMap::new(),
-                        unbound_text_fields: Vec::new(),
-                        timers: Timers::new(),
-                        current_context_menu: None,
-                        external_interface: ExternalInterface::new(),
-                        focus_tracker: FocusTracker::new(gc_context),
-                        audio_manager: AudioManager::new(),
-                    },
-                ))
-            }),
 
             frame_rate,
             frame_accumulator: 0.0,
@@ -307,6 +310,8 @@ impl Player {
             current_frame: None,
         };
 
+        let player = Player { data, gc_arena };
+
         player.mutate_with_update_context(|context| {
             // Instantiate an empty root before the main movie loads.
             let fake_root = MovieClip::from_movie(context.gc_context, fake_movie);
@@ -328,10 +333,10 @@ impl Player {
             result
         })?;
 
-        player.audio.set_frame_rate(frame_rate);
+        player.data.audio.set_frame_rate(frame_rate);
         let player_box = Arc::new(Mutex::new(player));
         let mut player_lock = player_box.lock().unwrap();
-        player_lock.self_reference = Some(Arc::downgrade(&player_box));
+        player_lock.data.self_reference = Some(Arc::downgrade(&player_box));
 
         std::mem::drop(player_lock);
 
@@ -1270,132 +1275,17 @@ impl Player {
     where
         F: for<'a, 'gc> FnOnce(&mut UpdateContext<'a, 'gc, '_>) -> R,
     {
-        // We have to do this piecewise borrowing of fields before the closure to avoid
-        // completely borrowing `self`.
-        let (
-            player_version,
-            swf,
-            renderer,
-            audio,
-            navigator,
-            ui,
-            rng,
-            mouse_position,
-            player,
-            system_properties,
-            instance_counter,
-            storage,
-            locale,
-            logging,
-            video,
-            needs_render,
-            max_execution_duration,
-            current_frame,
-            time_offset,
-            frame_rate,
-        ) = (
-            self.player_version,
-            &self.swf,
-            self.renderer.deref_mut(),
-            self.audio.deref_mut(),
-            self.navigator.deref_mut(),
-            self.ui.deref_mut(),
-            &mut self.rng,
-            &self.mouse_pos,
-            self.self_reference.clone(),
-            &mut self.system,
-            &mut self.instance_counter,
-            self.storage.deref_mut(),
-            self.locale.deref_mut(),
-            self.log.deref_mut(),
-            self.video.deref_mut(),
-            &mut self.needs_render,
-            self.max_execution_duration,
-            &mut self.current_frame,
-            &mut self.time_offset,
-            &mut self.frame_rate,
-        );
-
+        let player_data = &mut self.data;
         self.gc_arena.mutate(|gc_context, gc_root| {
             let mut root_data = gc_root.0.write(gc_context);
-            let mouse_hovered_object = root_data.mouse_hovered_object;
-            let focus_tracker = root_data.focus_tracker;
-            let (
-                stage,
-                library,
-                action_queue,
-                avm1,
-                avm2,
-                drag_object,
-                load_manager,
-                shared_objects,
-                unbound_text_fields,
-                timers,
-                current_context_menu,
-                external_interface,
-                audio_manager,
-            ) = root_data.update_context_params();
 
             let mut update_context = UpdateContext {
-                player_version,
-                swf,
-                library,
-                rng,
-                renderer,
-                audio,
-                navigator,
-                ui,
-                action_queue,
+                player_data,
+                gc_data: &mut *root_data,
                 gc_context,
-                stage,
-                mouse_hovered_object,
-                mouse_position,
-                drag_object,
-                player,
-                load_manager,
-                system: system_properties,
-                instance_counter,
-                storage,
-                locale,
-                log: logging,
-                video,
-                shared_objects,
-                unbound_text_fields,
-                timers,
-                current_context_menu,
-                needs_render,
-                avm1,
-                avm2,
-                external_interface,
-                update_start: Instant::now(),
-                max_execution_duration,
-                focus_tracker,
-                times_get_time_called: 0,
-                time_offset,
-                audio_manager,
-                frame_rate,
             };
 
-            let old_frame_rate = *update_context.frame_rate;
-
             let ret = f(&mut update_context);
-
-            let new_frame_rate = *update_context.frame_rate;
-
-            // If we changed the framerate, let the audio handler now.
-            #[allow(clippy::float_cmp)]
-            if old_frame_rate != new_frame_rate {
-                update_context.audio.set_frame_rate(new_frame_rate);
-            }
-
-            *current_frame = update_context
-                .stage
-                .root_clip()
-                .as_movie_clip()
-                .map(|clip| clip.current_frame());
-
-            // Hovered object may have been updated; copy it back to the GC root.
-            root_data.mouse_hovered_object = update_context.mouse_hovered_object;
 
             ret
         })
