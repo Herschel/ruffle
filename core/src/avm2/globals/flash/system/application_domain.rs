@@ -42,7 +42,14 @@ pub fn current_domain<'gc>(
     if let Some(appdomain) = appdomain {
         return Ok(DomainObject::from_domain(
             activation.context.gc_context,
-            Some(activation.context.avm2.prototypes().application_domain),
+            Some(
+                activation
+                    .context
+                    .gc_data
+                    .avm2
+                    .prototypes()
+                    .application_domain,
+            ),
             appdomain,
         )
         .into());
@@ -61,7 +68,14 @@ pub fn parent_domain<'gc>(
         if let Some(parent_domain) = appdomain.parent_domain() {
             return Ok(DomainObject::from_domain(
                 activation.context.gc_context,
-                Some(activation.context.avm2.prototypes().application_domain),
+                Some(
+                    activation
+                        .context
+                        .gc_data
+                        .avm2
+                        .prototypes()
+                        .application_domain,
+                ),
                 parent_domain,
             )
             .into());

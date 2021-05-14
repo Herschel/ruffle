@@ -133,7 +133,7 @@ impl<'gc> TObject<'gc> for BevelFilterObject<'gc> {
             value,
             activation,
             (*self).into(),
-            Some(activation.context.avm1.prototypes.bevel_filter),
+            Some(activation.context.gc_data.avm1.prototypes.bevel_filter),
         )
     }
 

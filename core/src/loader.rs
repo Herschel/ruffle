@@ -384,7 +384,11 @@ impl<'gc> Loader<'gc> {
                 .lock()
                 .expect("Could not lock player!!")
                 .update(|uc| -> Result<(), Error> {
-                    url = uc.navigator.resolve_relative_url(&url).into_owned();
+                    url = uc
+                        .player_data
+                        .navigator
+                        .resolve_relative_url(&url)
+                        .into_owned();
 
                     Ok(())
                 })?;
@@ -437,9 +441,13 @@ impl<'gc> Loader<'gc> {
                 .lock()
                 .expect("Could not lock player!!")
                 .update(|uc| -> Result<(), Error> {
-                    url = uc.navigator.resolve_relative_url(&url).into_owned();
+                    url = uc
+                        .player_data
+                        .navigator
+                        .resolve_relative_url(&url)
+                        .into_owned();
 
-                    let (clip, broadcaster) = match uc.load_manager.get_loader(handle) {
+                    let (clip, broadcaster) = match uc.gc_data.load_manager.get_loader(handle) {
                         Some(Loader::Movie {
                             target_clip,
                             target_broadcaster,
@@ -449,7 +457,8 @@ impl<'gc> Loader<'gc> {
                         _ => unreachable!(),
                     };
 
-                    replacing_root_movie = DisplayObject::ptr_eq(clip, uc.stage.root_clip());
+                    replacing_root_movie =
+                        DisplayObject::ptr_eq(clip, uc.gc_data.stage.root_clip());
 
                     clip.as_movie_clip().unwrap().unload(uc);
 
@@ -488,13 +497,16 @@ impl<'gc> Loader<'gc> {
                     .lock()
                     .expect("Could not lock player!!")
                     .update(|uc| {
-                        let domain =
-                            Avm2Domain::movie_domain(uc.gc_context, uc.avm2.global_domain());
-                        uc.library
+                        let domain = Avm2Domain::movie_domain(
+                            uc.gc_context,
+                            uc.gc_data.avm2.global_domain(),
+                        );
+                        uc.gc_data
+                            .library
                             .library_for_movie_mut(movie.clone())
                             .set_avm2_domain(domain);
 
-                        let (clip, broadcaster) = match uc.load_manager.get_loader(handle) {
+                        let (clip, broadcaster) = match uc.gc_data.load_manager.get_loader(handle) {
                             Some(Loader::Movie {
                                 target_clip,
                                 target_broadcaster,
@@ -533,7 +545,8 @@ impl<'gc> Loader<'gc> {
                         // Finalize morph shapes.
                         for (id, static_data) in morph_shapes {
                             let morph_shape = MorphShape::new(uc.gc_context, static_data);
-                            uc.library
+                            uc.gc_data
+                                .library
                                 .library_for_movie_mut(movie.clone())
                                 .register_character(
                                     id,
@@ -553,7 +566,7 @@ impl<'gc> Loader<'gc> {
                         }
 
                         if let Some(Loader::Movie { loader_status, .. }) =
-                            uc.load_manager.get_loader_mut(handle)
+                            uc.gc_data.load_manager.get_loader_mut(handle)
                         {
                             *loader_status = LoaderStatus::Succeeded;
                         };
@@ -570,7 +583,7 @@ impl<'gc> Loader<'gc> {
                     .lock()
                     .expect("Could not lock player!!")
                     .update(|uc| -> Result<(), Error> {
-                        let (clip, broadcaster) = match uc.load_manager.get_loader(handle) {
+                        let (clip, broadcaster) = match uc.gc_data.load_manager.get_loader(handle) {
                             Some(Loader::Movie {
                                 target_clip,
                                 target_broadcaster,
@@ -596,7 +609,7 @@ impl<'gc> Loader<'gc> {
                         }
 
                         if let Some(Loader::Movie { loader_status, .. }) =
-                            uc.load_manager.get_loader_mut(handle)
+                            uc.gc_data.load_manager.get_loader_mut(handle)
                         {
                             *loader_status = LoaderStatus::Failed;
                         };
@@ -626,7 +639,7 @@ impl<'gc> Loader<'gc> {
 
             // Fire the load handler.
             player.lock().unwrap().update(|uc| {
-                let loader = uc.load_manager.get_loader(handle);
+                let loader = uc.gc_data.load_manager.get_loader(handle);
                 let that = match loader {
                     Some(&Loader::Form { target_object, .. }) => target_object,
                     None => return Err(Error::Cancelled),
@@ -673,7 +686,7 @@ impl<'gc> Loader<'gc> {
 
             // Fire the load handler.
             player.lock().unwrap().update(|uc| {
-                let loader = uc.load_manager.get_loader(handle);
+                let loader = uc.gc_data.load_manager.get_loader(handle);
                 let that = match loader {
                     Some(&Loader::LoadVars { target_object, .. }) => target_object,
                     None => return Err(Error::Cancelled),
@@ -777,18 +790,21 @@ impl<'gc> Loader<'gc> {
 
                 player.lock().expect("Could not lock player!!").update(
                     |uc| -> Result<(), Error> {
-                        let (mut node, active_clip) = match uc.load_manager.get_loader(handle) {
-                            Some(Loader::Xml {
-                                target_node,
-                                active_clip,
-                                ..
-                            }) => (*target_node, *active_clip),
-                            None => return Err(Error::Cancelled),
-                            _ => unreachable!(),
-                        };
+                        let (mut node, active_clip) =
+                            match uc.gc_data.load_manager.get_loader(handle) {
+                                Some(Loader::Xml {
+                                    target_node,
+                                    active_clip,
+                                    ..
+                                }) => (*target_node, *active_clip),
+                                None => return Err(Error::Cancelled),
+                                _ => unreachable!(),
+                            };
 
-                        let object =
-                            node.script_object(uc.gc_context, Some(uc.avm1.prototypes().xml_node));
+                        let object = node.script_object(
+                            uc.gc_context,
+                            Some(uc.gc_data.avm1.prototypes().xml_node),
+                        );
                         Avm1::run_stack_frame_for_method(
                             active_clip,
                             object,
@@ -813,18 +829,21 @@ impl<'gc> Loader<'gc> {
             } else {
                 player.lock().expect("Could not lock player!!").update(
                     |uc| -> Result<(), Error> {
-                        let (mut node, active_clip) = match uc.load_manager.get_loader(handle) {
-                            Some(Loader::Xml {
-                                target_node,
-                                active_clip,
-                                ..
-                            }) => (*target_node, *active_clip),
-                            None => return Err(Error::Cancelled),
-                            _ => unreachable!(),
-                        };
+                        let (mut node, active_clip) =
+                            match uc.gc_data.load_manager.get_loader(handle) {
+                                Some(Loader::Xml {
+                                    target_node,
+                                    active_clip,
+                                    ..
+                                }) => (*target_node, *active_clip),
+                                None => return Err(Error::Cancelled),
+                                _ => unreachable!(),
+                            };
 
-                        let object =
-                            node.script_object(uc.gc_context, Some(uc.avm1.prototypes().xml_node));
+                        let object = node.script_object(
+                            uc.gc_context,
+                            Some(uc.gc_data.avm1.prototypes().xml_node),
+                        );
 
                         Avm1::run_stack_frame_for_method(
                             active_clip,

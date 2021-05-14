@@ -144,7 +144,7 @@ pub fn xmlnode_clone_node<'gc>(
 
         return Ok(Value::Object(clone_node.script_object(
             activation.context.gc_context,
-            Some(activation.context.avm1.prototypes.xml_node),
+            Some(activation.context.gc_data.avm1.prototypes.xml_node),
         )));
     }
 
@@ -321,7 +321,7 @@ pub fn xmlnode_child_nodes<'gc>(
     if let Some(node) = this.as_xml_node() {
         let array = ScriptObject::array(
             activation.context.gc_context,
-            Some(activation.context.avm1.prototypes.array),
+            Some(activation.context.gc_data.avm1.prototypes.array),
         );
 
         let mut compatible_nodes = 0;
@@ -335,7 +335,7 @@ pub fn xmlnode_child_nodes<'gc>(
                 child
                     .script_object(
                         activation.context.gc_context,
-                        Some(activation.context.avm1.prototypes.xml_node),
+                        Some(activation.context.gc_data.avm1.prototypes.xml_node),
                     )
                     .into(),
                 activation.context.gc_context,
@@ -371,7 +371,7 @@ pub fn xmlnode_first_child<'gc>(
                 child
                     .script_object(
                         activation.context.gc_context,
-                        Some(activation.context.avm1.prototypes.xml_node),
+                        Some(activation.context.gc_data.avm1.prototypes.xml_node),
                     )
                     .into()
             })
@@ -401,7 +401,7 @@ pub fn xmlnode_last_child<'gc>(
                 child
                     .script_object(
                         activation.context.gc_context,
-                        Some(activation.context.avm1.prototypes.xml_node),
+                        Some(activation.context.gc_data.avm1.prototypes.xml_node),
                     )
                     .into()
             })
@@ -423,7 +423,7 @@ pub fn xmlnode_parent_node<'gc>(
                 parent
                     .script_object(
                         activation.context.gc_context,
-                        Some(activation.context.avm1.prototypes.xml_node),
+                        Some(activation.context.gc_data.avm1.prototypes.xml_node),
                     )
                     .into()
             })
@@ -452,7 +452,7 @@ pub fn xmlnode_previous_sibling<'gc>(
             .map(|mut prev| {
                 prev.script_object(
                     activation.context.gc_context,
-                    Some(activation.context.avm1.prototypes.xml_node),
+                    Some(activation.context.gc_data.avm1.prototypes.xml_node),
                 )
                 .into()
             })
@@ -481,7 +481,7 @@ pub fn xmlnode_next_sibling<'gc>(
             .map(|mut next| {
                 next.script_object(
                     activation.context.gc_context,
-                    Some(activation.context.avm1.prototypes.xml_node),
+                    Some(activation.context.gc_data.avm1.prototypes.xml_node),
                 )
                 .into()
             })
@@ -839,7 +839,7 @@ pub fn xml_create_element<'gc>(
     let object = XmlObject::from_xml_node(
         activation.context.gc_context,
         xml_node,
-        Some(activation.context.avm1.prototypes().xml_node),
+        Some(activation.context.gc_data.avm1.prototypes().xml_node),
     );
 
     xml_node.introduce_script_object(activation.context.gc_context, object);
@@ -866,7 +866,7 @@ pub fn xml_create_text_node<'gc>(
     let object = XmlObject::from_xml_node(
         activation.context.gc_context,
         xml_node,
-        Some(activation.context.avm1.prototypes().xml_node),
+        Some(activation.context.gc_data.avm1.prototypes().xml_node),
     );
 
     xml_node.introduce_script_object(activation.context.gc_context, object);
@@ -1096,25 +1096,37 @@ fn spawn_xml_fetch<'gc>(
 
     this.set("loaded", false.into(), activation)?;
 
-    let fetch = activation.context.navigator.fetch(&url, request_options);
+    let fetch = activation
+        .context
+        .player_data
+        .navigator
+        .fetch(&url, request_options);
     let target_clip = activation.target_clip_or_root()?;
     // given any defined loader object, sends the request. Will load into LoadVars if given.
     let process = if let Some(node) = loader_object.as_xml_node() {
-        activation.context.load_manager.load_xml_into_node(
-            activation.context.player.clone().unwrap(),
+        activation.context.gc_data.load_manager.load_xml_into_node(
+            activation.context.player_data.self_reference.clone().unwrap(),
             node,
             target_clip,
             fetch,
         )
     } else {
-        activation.context.load_manager.load_form_into_load_vars(
-            activation.context.player.clone().unwrap(),
-            loader_object,
-            fetch,
-        )
+        activation
+            .context
+            .gc_data
+            .load_manager
+            .load_form_into_load_vars(
+                activation.context.player_data.self_reference.clone().unwrap(),
+                loader_object,
+                fetch,
+            )
     };
 
-    activation.context.navigator.spawn_future(process);
+    activation
+        .context
+        .player_data
+        .navigator
+        .spawn_future(process);
 
     Ok(true.into())
 }

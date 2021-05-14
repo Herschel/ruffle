@@ -131,7 +131,14 @@ impl<'gc> TObject<'gc> for DisplacementMapFilterObject<'gc> {
             value,
             activation,
             (*self).into(),
-            Some(activation.context.avm1.prototypes.displacement_map_filter),
+            Some(
+                activation
+                    .context
+                    .gc_data
+                    .avm1
+                    .prototypes
+                    .displacement_map_filter,
+            ),
         )
     }
 

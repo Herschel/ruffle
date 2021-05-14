@@ -61,7 +61,7 @@ pub fn define_display_object_proto<'gc>(
         FunctionObject::function(
             gc_context,
             Executable::Native(|activation, _this, _args| {
-                Ok(activation.context.avm1.global_object())
+                Ok(activation.context.gc_data.avm1.global_object())
             }),
             Some(fn_proto),
             fn_proto,

@@ -27,19 +27,20 @@ pub struct Timers<'gc> {
 impl<'gc> Timers<'gc> {
     /// Ticks all timers and runs necessary callbacks.
     pub fn update_timers(context: &mut UpdateContext<'_, 'gc, '_>, dt: f64) -> Option<f64> {
-        context.timers.cur_time = context
+        context.gc_data.timers.cur_time = context
+            .gc_data
             .timers
             .cur_time
             .wrapping_add((dt * Self::TIMER_SCALE) as u64);
-        let num_timers = context.timers.num_timers();
+        let num_timers = context.gc_data.timers.num_timers();
 
         if num_timers == 0 {
             return None;
         }
 
-        let version = context.swf.header().version;
-        let globals = context.avm1.global_object_cell();
-        let level0 = context.stage.root_clip();
+        let version = context.player_data.swf.header().version;
+        let globals = context.gc_data.avm1.global_object_cell();
+        let level0 = context.gc_data.stage.root_clip();
 
         let mut activation = Activation::from_nothing(
             context.reborrow(),
@@ -54,24 +55,25 @@ impl<'gc> Timers<'gc> {
         let undefined = Value::Undefined.coerce_to_object(&mut activation);
 
         let mut tick_count = 0;
-        let cur_time = activation.context.timers.cur_time;
+        let cur_time = activation.context.gc_data.timers.cur_time;
 
         // We have to be careful because the timer list can be mutated while updating;
         // a timer callback could add more timers, clear timers, etc.
         while activation
             .context
+            .gc_data
             .timers
             .peek()
             .map(|timer| timer.tick_time)
             .unwrap_or(cur_time)
             < cur_time
         {
-            let timer = activation.context.timers.peek().unwrap();
+            let timer = activation.context.gc_data.timers.peek().unwrap();
 
             // TODO: This is only really necessary because BinaryHeap lacks `remove` or `retain` on stable.
             // We can remove the timers straight away in `clearInterval` once this is stable.
             if !timer.is_alive.get() {
-                activation.context.timers.pop();
+                activation.context.gc_data.timers.pop();
                 continue;
             }
 
@@ -79,8 +81,14 @@ impl<'gc> Timers<'gc> {
             // SANITY: Only allow so many ticks per timer per update.
             if tick_count > Self::MAX_TICKS {
                 // Reset our time to a little bit before the nearest timer.
-                let next_time = activation.context.timers.peek_mut().unwrap().tick_time;
-                activation.context.timers.cur_time = next_time.wrapping_sub(100);
+                let next_time = activation
+                    .context
+                    .gc_data
+                    .timers
+                    .peek_mut()
+                    .unwrap()
+                    .tick_time;
+                activation.context.gc_data.timers.cur_time = next_time.wrapping_sub(100);
                 break;
             }
 
@@ -115,11 +123,11 @@ impl<'gc> Timers<'gc> {
                 crate::player::Player::run_actions(&mut activation.context);
             }
 
-            let mut timer = activation.context.timers.peek_mut().unwrap();
+            let mut timer = activation.context.gc_data.timers.peek_mut().unwrap();
             if timer.is_timeout {
                 // Timeouts only fire once.
                 drop(timer);
-                activation.context.timers.pop();
+                activation.context.gc_data.timers.pop();
             } else {
                 // Reset setInterval timers. `peek_mut` re-sorts the timer in the priority queue.
                 timer.tick_time = timer.tick_time.wrapping_add(timer.interval);
@@ -129,6 +137,7 @@ impl<'gc> Timers<'gc> {
         // Return estimated time until next timer tick.
         activation
             .context
+            .gc_data
             .timers
             .peek()
             .map(|timer| (timer.tick_time.wrapping_sub(cur_time)) as f64 / Self::TIMER_SCALE)

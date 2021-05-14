@@ -64,9 +64,13 @@ pub fn random<'gc>(
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     match args.get(0) {
-        Some(&Value::Number(max)) => {
-            Ok(activation.context.rng.gen_range(0.0f64..max).floor().into())
-        }
+        Some(&Value::Number(max)) => Ok(activation
+            .context
+            .player_data
+            .rng
+            .gen_range(0.0f64..max)
+            .floor()
+            .into()),
         _ => Ok(Value::Undefined), //TODO: Shouldn't this be an error condition?
     }
 }
@@ -333,6 +337,7 @@ pub fn create_timer<'gc>(
 
     let id = activation
         .context
+        .gc_data
         .timers
         .add_timer(callback, interval, params, is_timeout);
 
@@ -348,7 +353,7 @@ pub fn clear_interval<'gc>(
         .get(0)
         .unwrap_or(&Value::Undefined)
         .coerce_to_i32(activation)?;
-    if !activation.context.timers.remove(id) {
+    if !activation.context.gc_data.timers.remove(id) {
         log::info!("clearInterval: Timer {} does not exist", id);
     }
 
@@ -364,7 +369,7 @@ pub fn clear_timeout<'gc>(
         .get(0)
         .unwrap_or(&Value::Undefined)
         .coerce_to_i32(activation)?;
-    if !activation.context.timers.remove(id) {
+    if !activation.context.gc_data.timers.remove(id) {
         log::info!("clearTimeout: Timer {} does not exist", id);
     }
 
@@ -376,7 +381,7 @@ pub fn update_after_event<'gc>(
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    *activation.context.needs_render = true;
+    activation.context.player_data.needs_render = true;
 
     Ok(Value::Undefined)
 }

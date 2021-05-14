@@ -855,64 +855,80 @@ mod tests {
         F: for<'a, 'gc> FnOnce(&mut Activation<'_, 'gc, '_>, Object<'gc>) -> R,
     {
         rootless_arena(|gc_context| {
-            let mut avm1 = Avm1::new(gc_context, swf_version);
-            let mut avm2 = Avm2::new(gc_context);
+            let avm1 = Avm1::new(gc_context, swf_version);
+            let avm2 = Avm2::new(gc_context);
             let swf = Arc::new(SwfMovie::empty(swf_version));
             let root: DisplayObject<'_> =
                 MovieClip::new(SwfSlice::empty(swf.clone()), gc_context).into();
             root.set_depth(gc_context, 0);
 
             let stage = Stage::empty(gc_context, 550, 400);
-            let mut frame_rate = 12.0;
+            let frame_rate = 12.0;
 
             let object = ScriptObject::object(gc_context, Some(avm1.prototypes().object)).into();
             let globals = avm1.global_object_cell();
 
             let mut context = UpdateContext {
                 gc_context,
-                player_version: 32,
-                swf: &swf,
-                stage,
-                rng: &mut SmallRng::from_seed([0u8; 32]),
-                action_queue: &mut crate::context::ActionQueue::new(),
-                audio: &mut NullAudioBackend::new(),
-                audio_manager: &mut AudioManager::new(),
-                ui: &mut NullUiBackend::new(),
-                library: &mut Library::empty(gc_context),
-                navigator: &mut NullNavigatorBackend::new(),
-                renderer: &mut NullRenderer::new(),
-                locale: &mut NullLocaleBackend::new(),
-                log: &mut NullLogBackend::new(),
-                video: &mut NullVideoBackend::new(),
-                mouse_hovered_object: None,
-                mouse_position: &(Twips::zero(), Twips::zero()),
-                drag_object: &mut None,
-                player: None,
-                load_manager: &mut LoadManager::new(),
-                system: &mut SystemProperties::default(),
-                instance_counter: &mut 0,
-                storage: &mut MemoryStorageBackend::default(),
-                shared_objects: &mut HashMap::new(),
-                unbound_text_fields: &mut Vec::new(),
-                timers: &mut Timers::new(),
-                current_context_menu: &mut None,
-                needs_render: &mut false,
-                avm1: &mut avm1,
-                avm2: &mut avm2,
-                external_interface: &mut Default::default(),
-                update_start: Instant::now(),
-                max_execution_duration: Duration::from_secs(15),
-                focus_tracker: FocusTracker::new(gc_context),
-                times_get_time_called: 0,
-                time_offset: &mut 0,
-                frame_rate: &mut frame_rate,
+                player_data: &mut crate::player::PlayerData {
+                    player_version: 32,
+                    swf: swf,
+                    rng: SmallRng::from_seed([0u8; 32]),
+                    audio: Box::new(NullAudioBackend::new()),
+                    ui: Box::new(NullUiBackend::new()),
+                    navigator: Box::new(NullNavigatorBackend::new()),
+                    renderer: Box::new(NullRenderer::new()),
+                    storage: Box::new(MemoryStorageBackend::default()),
+                    locale: Box::new(NullLocaleBackend::new()),
+                    log: Box::new(NullLogBackend::new()),
+                    video: Box::new(NullVideoBackend::new()),
+                    mouse_pos: (Twips::zero(), Twips::zero()),
+                    system: SystemProperties::default(),
+                    warn_on_unsupported_content: false,
+                    is_playing: true,
+                    needs_render: false,
+                    transform_stack: crate::transform::TransformStack::new(),
+                    frame_rate: frame_rate,
+                    frame_accumulator: 0.0,
+                    recent_run_frame_timings: Default::default(),
+                    instance_counter: 0,
+                    max_execution_duration: Duration::from_secs(15),
+                    update_start: Instant::now(),
+                    time_offset: 0,
+                    is_mouse_down: false,
+                    mouse_cursor: crate::backend::ui::MouseCursor::Arrow,
+                    self_reference: None,
+                    current_frame: None,
+                    times_get_time_called: 0,
+                    time_til_next_timer: None,
+                },
+                gc_data: &mut crate::player::GcRootData {
+                    stage,
+                    action_queue: crate::context::ActionQueue::new(),
+                    audio_manager: AudioManager::new(),
+                    library: Library::empty(gc_context),
+                    mouse_hovered_object: None,
+                    drag_object: None,
+                    load_manager: LoadManager::new(),
+                    shared_objects: HashMap::new(),
+                    unbound_text_fields: Vec::new(),
+                    timers: Timers::new(),
+                    current_context_menu: None,
+                    avm1,
+                    avm2,
+                    external_interface: Default::default(),
+                    focus_tracker: FocusTracker::new(gc_context),
+                },
             };
-            context.stage.replace_at_depth(&mut context, root, 0);
+            context
+                .gc_data
+                .stage
+                .replace_at_depth(&mut context, root, 0);
 
             root.post_instantiation(&mut context, root, None, Instantiator::Movie, false);
             root.set_name(context.gc_context, "");
 
-            let swf_version = context.swf.version();
+            let swf_version = context.player_data.swf.version();
             let mut activation = Activation::from_nothing(
                 context,
                 ActivationIdentifier::root("[Test]"),
@@ -1011,7 +1027,7 @@ mod tests {
                 activation.context.gc_context,
                 Executable::Native(|_avm, _this, _args| Ok("Virtual!".into())),
                 None,
-                activation.context.avm1.prototypes.function,
+                activation.context.gc_data.avm1.prototypes.function,
             );
 
             object.as_script_object().unwrap().add_property(
@@ -1037,7 +1053,7 @@ mod tests {
                 activation.context.gc_context,
                 Executable::Native(|_avm, _this, _args| Ok("Virtual!".into())),
                 None,
-                activation.context.avm1.prototypes.function,
+                activation.context.gc_data.avm1.prototypes.function,
             );
 
             object.as_script_object().unwrap().add_property(
@@ -1093,7 +1109,7 @@ mod tests {
                 activation.context.gc_context,
                 Executable::Native(|_avm, _this, _args| Ok(Value::Null)),
                 None,
-                activation.context.avm1.prototypes.function,
+                activation.context.gc_data.avm1.prototypes.function,
             );
 
             object.as_script_object().unwrap().define_value(

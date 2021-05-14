@@ -917,7 +917,7 @@ impl<'gc> TObject<'gc> for BitmapDataObject<'gc> {
             value,
             activation,
             (*self).into(),
-            Some(activation.context.avm1.prototypes.bitmap_data),
+            Some(activation.context.gc_data.avm1.prototypes.bitmap_data),
         )
     }
 

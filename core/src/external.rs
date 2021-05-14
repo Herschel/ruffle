@@ -126,6 +126,7 @@ impl Value {
             Avm1Value::Object(object) => {
                 if activation
                     .context
+                    .gc_data
                     .avm1
                     .prototypes()
                     .array
@@ -160,7 +161,7 @@ impl Value {
             Value::Object(values) => {
                 let object = Avm1ScriptObject::object(
                     activation.context.gc_context,
-                    Some(activation.context.avm1.prototypes().object),
+                    Some(activation.context.gc_data.avm1.prototypes().object),
                 );
                 for (key, value) in values {
                     let _ = object.set(&key, value.into_avm1(activation), activation);
@@ -170,7 +171,7 @@ impl Value {
             Value::List(values) => {
                 let array = Avm1ScriptObject::array(
                     activation.context.gc_context,
-                    Some(activation.context.avm1.prototypes().array),
+                    Some(activation.context.gc_data.avm1.prototypes().array),
                 );
                 for value in values {
                     array.set_array_element(
@@ -203,9 +204,9 @@ impl<'gc> Callback<'gc> {
     ) -> Value {
         match self {
             Callback::Avm1 { this, method } => {
-                let base_clip = context.stage.root_clip();
-                let swf_version = context.swf.version();
-                let globals = context.avm1.global_object_cell();
+                let base_clip = context.gc_data.stage.root_clip();
+                let swf_version = context.player_data.swf.version();
+                let globals = context.gc_data.avm1.global_object_cell();
                 let mut activation = Avm1Activation::from_nothing(
                     context.reborrow(),
                     Avm1ActivationIdentifier::root("[ExternalInterface]"),

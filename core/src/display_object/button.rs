@@ -163,6 +163,7 @@ impl<'gc> Button<'gc> {
                     // Instantiate new child.
                     _ => {
                         if let Ok(child) = context
+                            .gc_data
                             .library
                             .library_for_movie_mut(movie.clone())
                             .instantiate_by_id(record.id, context.gc_context)
@@ -258,7 +259,7 @@ impl<'gc> TDisplayObject<'gc> for Button<'gc> {
             let object = StageObject::for_display_object(
                 context.gc_context,
                 display_object,
-                Some(context.avm1.prototypes().button),
+                Some(context.gc_data.avm1.prototypes().button),
             );
             mc.object = Some(object.into());
 
@@ -286,6 +287,7 @@ impl<'gc> TDisplayObject<'gc> for Button<'gc> {
             for record in &read.static_data.read().records {
                 if record.states.contains(swf::ButtonState::HIT_TEST) {
                     match context
+                        .gc_data
                         .library
                         .library_for_movie_mut(read.static_data.read().swf.clone())
                         .instantiate_by_id(record.id, context.gc_context)
@@ -482,9 +484,9 @@ impl<'gc> TDisplayObject<'gc> for Button<'gc> {
 
         // Queue ActionScript-defined event handlers after the SWF defined ones.
         // (e.g., clip.onRelease = foo).
-        if context.swf.version() >= 6 {
+        if context.player_data.swf.version() >= 6 {
             if let Some(name) = event.method_name() {
-                context.action_queue.queue_actions(
+                context.gc_data.action_queue.queue_actions(
                     self_display_object,
                     ActionType::Method {
                         object: write.object.unwrap(),
@@ -515,7 +517,7 @@ impl<'gc> TDisplayObject<'gc> for Button<'gc> {
     fn unload(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
         let had_focus = self.0.read().has_focus;
         if had_focus {
-            let tracker = context.focus_tracker;
+            let tracker = context.gc_data.focus_tracker;
             tracker.set(None, context);
         }
         if let Some(node) = self.maskee() {
@@ -539,6 +541,7 @@ impl<'gc> ButtonData<'gc> {
     ) {
         if let Some((id, sound_info)) = sound {
             if let Some(sound_handle) = context
+                .gc_data
                 .library
                 .library_for_movie_mut(self.movie())
                 .get_sound(*id)
@@ -562,7 +565,7 @@ impl<'gc> ButtonData<'gc> {
                 {
                     // Note that AVM1 buttons run actions relative to their parent, not themselves.
                     handled = ClipEventResult::Handled;
-                    context.action_queue.queue_actions(
+                    context.gc_data.action_queue.queue_actions(
                         parent,
                         ActionType::Normal {
                             bytecode: action.action_data.clone(),

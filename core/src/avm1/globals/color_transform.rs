@@ -134,6 +134,7 @@ pub fn color_transform_to_object<'gc>(
     ];
     let constructor = activation
         .context
+        .gc_data
         .avm1
         .prototypes
         .color_transform_constructor;

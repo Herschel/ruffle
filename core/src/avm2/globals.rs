@@ -49,7 +49,7 @@ fn trace<'gc>(
         }
     }
 
-    activation.context.log.avm_trace(&message);
+    activation.context.player_data.log.avm_trace(&message);
 
     Ok(Value::Undefined)
 }
@@ -394,7 +394,7 @@ pub fn load_player_globals<'gc>(
     // At this point, we need at least a partial set of system prototypes in
     // order to continue initializing the player. The rest of the prototypes
     // are set to a bare object until we have a chance to initialize them.
-    activation.context.avm2.system_prototypes = Some(SystemPrototypes::new(
+    activation.context.gc_data.avm2.system_prototypes = Some(SystemPrototypes::new(
         object_proto,
         fn_proto,
         class_proto,
@@ -405,7 +405,13 @@ pub fn load_player_globals<'gc>(
     // clone the prototypes list and modify it outside of the activation. This
     // also has the side effect that none of these classes can get at each
     // other from the activation they're handed.
-    let mut sp = activation.context.avm2.system_prototypes.clone().unwrap();
+    let mut sp = activation
+        .context
+        .gc_data
+        .avm2
+        .system_prototypes
+        .clone()
+        .unwrap();
 
     sp.global = class(
         activation,
@@ -468,7 +474,7 @@ pub fn load_player_globals<'gc>(
     // globals scope *before* the `Object` class
     gs.set_proto(mc, sp.global);
 
-    activation.context.avm2.system_prototypes = Some(sp);
+    activation.context.gc_data.avm2.system_prototypes = Some(sp);
 
     function(mc, "", "trace", trace, fn_proto, domain, script)?;
     function(mc, "", "isFinite", is_finite, fn_proto, domain, script)?;
@@ -495,6 +501,7 @@ pub fn load_player_globals<'gc>(
 
     activation
         .context
+        .gc_data
         .avm2
         .system_prototypes
         .as_mut()
@@ -509,6 +516,7 @@ pub fn load_player_globals<'gc>(
 
     activation
         .context
+        .gc_data
         .avm2
         .system_prototypes
         .as_mut()
@@ -524,6 +532,7 @@ pub fn load_player_globals<'gc>(
     // package `flash.system`
     activation
         .context
+        .gc_data
         .avm2
         .system_prototypes
         .as_mut()
@@ -546,6 +555,7 @@ pub fn load_player_globals<'gc>(
     // package `flash.events`
     activation
         .context
+        .gc_data
         .avm2
         .system_prototypes
         .as_mut()
@@ -574,6 +584,7 @@ pub fn load_player_globals<'gc>(
     // package `flash.utils`
     activation
         .context
+        .gc_data
         .avm2
         .system_prototypes
         .as_mut()
@@ -607,6 +618,7 @@ pub fn load_player_globals<'gc>(
     // package `flash.display`
     activation
         .context
+        .gc_data
         .avm2
         .system_prototypes
         .as_mut()
@@ -620,6 +632,7 @@ pub fn load_player_globals<'gc>(
     )?;
     activation
         .context
+        .gc_data
         .avm2
         .system_prototypes
         .as_mut()
@@ -654,6 +667,7 @@ pub fn load_player_globals<'gc>(
     )?;
     activation
         .context
+        .gc_data
         .avm2
         .system_prototypes
         .as_mut()
@@ -667,6 +681,7 @@ pub fn load_player_globals<'gc>(
     )?;
     activation
         .context
+        .gc_data
         .avm2
         .system_prototypes
         .as_mut()
@@ -680,6 +695,7 @@ pub fn load_player_globals<'gc>(
     )?;
     activation
         .context
+        .gc_data
         .avm2
         .system_prototypes
         .as_mut()
@@ -693,6 +709,7 @@ pub fn load_player_globals<'gc>(
     )?;
     activation
         .context
+        .gc_data
         .avm2
         .system_prototypes
         .as_mut()
@@ -727,6 +744,7 @@ pub fn load_player_globals<'gc>(
     )?;
     activation
         .context
+        .gc_data
         .avm2
         .system_prototypes
         .as_mut()
@@ -754,6 +772,7 @@ pub fn load_player_globals<'gc>(
     )?;
     activation
         .context
+        .gc_data
         .avm2
         .system_prototypes
         .as_mut()
@@ -797,6 +816,7 @@ pub fn load_player_globals<'gc>(
     // package `flash.geom`
     activation
         .context
+        .gc_data
         .avm2
         .system_prototypes
         .as_mut()
@@ -812,6 +832,7 @@ pub fn load_player_globals<'gc>(
     // package `flash.media`
     activation
         .context
+        .gc_data
         .avm2
         .system_prototypes
         .as_mut()
@@ -827,6 +848,7 @@ pub fn load_player_globals<'gc>(
     // package `flash.text`
     activation
         .context
+        .gc_data
         .avm2
         .system_prototypes
         .as_mut()
@@ -840,6 +862,7 @@ pub fn load_player_globals<'gc>(
     )?;
     activation
         .context
+        .gc_data
         .avm2
         .system_prototypes
         .as_mut()

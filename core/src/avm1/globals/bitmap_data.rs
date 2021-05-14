@@ -130,7 +130,12 @@ pub fn get_rectangle<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
-            let proto = activation.context.avm1.prototypes.rectangle_constructor;
+            let proto = activation
+                .context
+                .gc_data
+                .avm1
+                .prototypes
+                .rectangle_constructor;
             let rect = proto.construct(
                 activation,
                 &[
@@ -374,7 +379,7 @@ pub fn clone<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
-            let prototype = activation.context.avm1.prototypes.bitmap_data;
+            let prototype = activation.context.gc_data.avm1.prototypes.bitmap_data;
             let new_bitmap_data = prototype.create_bare_object(activation, prototype)?;
 
             new_bitmap_data
@@ -594,7 +599,12 @@ pub fn get_color_bounds_rect<'gc>(
                     .read()
                     .color_bounds_rect(find_color, mask, color);
 
-                let proto = activation.context.avm1.prototypes.rectangle_constructor;
+                let proto = activation
+                    .context
+                    .gc_data
+                    .avm1
+                    .prototypes
+                    .rectangle_constructor;
                 let rect =
                     proto.construct(activation, &[x.into(), y.into(), w.into(), h.into()])?;
                 return Ok(rect);
@@ -1294,11 +1304,11 @@ pub fn load_bitmap<'gc>(
         .unwrap_or(&Value::Undefined)
         .coerce_to_string(activation)?;
 
-    let library = &*activation.context.library;
+    let library = &activation.context.gc_data.library;
 
     let movie = activation.target_clip_or_root()?.movie();
 
-    let renderer = &mut activation.context.renderer;
+    let renderer = &mut activation.context.player_data.renderer;
 
     let character = movie
         .and_then(|m| library.library_for_movie(m))
@@ -1306,7 +1316,7 @@ pub fn load_bitmap<'gc>(
 
     if let Some(Character::Bitmap(bitmap_object)) = character {
         if let Some(bitmap) = renderer.get_bitmap_pixels(bitmap_object.bitmap_handle()) {
-            let prototype = activation.context.avm1.prototypes.bitmap_data;
+            let prototype = activation.context.gc_data.avm1.prototypes.bitmap_data;
             let new_bitmap_data = prototype.create_bare_object(activation, prototype)?;
 
             let pixels: Vec<i32> = bitmap.data.into();

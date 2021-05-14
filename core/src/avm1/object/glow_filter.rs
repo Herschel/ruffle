@@ -89,7 +89,7 @@ impl<'gc> TObject<'gc> for GlowFilterObject<'gc> {
             value,
             activation,
             (*self).into(),
-            Some(activation.context.avm1.prototypes.glow_filter),
+            Some(activation.context.gc_data.avm1.prototypes.glow_filter),
         )
     }
 

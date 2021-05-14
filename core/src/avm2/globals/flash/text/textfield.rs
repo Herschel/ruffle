@@ -25,9 +25,12 @@ pub fn instance_init<'gc>(
         activation.super_init(this, &[])?;
 
         if this.as_display_object().is_none() {
-            let movie = Arc::new(SwfMovie::empty(activation.context.swf.version()));
+            let movie = Arc::new(SwfMovie::empty(
+                activation.context.player_data.swf.version(),
+            ));
             let movie_library = activation
                 .context
+                .gc_data
                 .library
                 .library_for_movie_mut(movie.clone());
             movie_library.force_avm_type(AvmType::Avm2);

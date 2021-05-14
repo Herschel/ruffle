@@ -296,7 +296,7 @@ impl TextFormat {
         context: &mut UpdateContext<'_, 'gc, '_>,
     ) -> Self {
         let encoding = swf_movie.encoding();
-        let movie_library = context.library.library_for_movie_mut(swf_movie);
+        let movie_library = context.gc_data.library.library_for_movie_mut(swf_movie);
         let font = et.font_id.and_then(|fid| movie_library.get_font(fid));
         let font_class = et
             .font_class_name
@@ -556,7 +556,7 @@ impl TextFormat {
     ) -> Result<Avm1Object<'gc>, crate::avm1::error::Error<'gc>> {
         let object = Avm1ScriptObject::object(
             activation.context.gc_context,
-            Some(activation.context.avm1.prototypes().text_format),
+            Some(activation.context.gc_data.avm1.prototypes().text_format),
         );
 
         object.set(
@@ -682,7 +682,7 @@ impl TextFormat {
         if let Some(ts) = &self.tab_stops {
             let tab_stops = Avm1ScriptObject::array(
                 activation.context.gc_context,
-                Some(activation.context.avm1.prototypes().array),
+                Some(activation.context.gc_data.avm1.prototypes().array),
             );
 
             tab_stops.set_length(activation.context.gc_context, ts.len());
@@ -704,7 +704,7 @@ impl TextFormat {
         &self,
         activation: &mut Avm2Activation<'_, 'gc, '_>,
     ) -> Result<Avm2Object<'gc>, Avm2Error> {
-        let mut proto = activation.context.avm2.prototypes().textformat;
+        let mut proto = activation.context.gc_data.avm2.prototypes().textformat;
         let constr = proto
             .get_property(
                 proto,
@@ -857,7 +857,7 @@ impl TextFormat {
             let tab_stop_storage = ts.iter().copied().collect();
             let tab_stops = Avm2ArrayObject::from_array(
                 tab_stop_storage,
-                activation.context.avm2.prototypes().array,
+                activation.context.gc_data.avm2.prototypes().array,
                 activation.context.gc_context,
             );
 

@@ -184,7 +184,7 @@ pub fn map_point<'gc>(
     if let Some(object) = this.as_displacement_map_filter_object() {
         let (x, y) = object.map_point();
 
-        let proto = activation.context.avm1.prototypes.point_constructor;
+        let proto = activation.context.gc_data.avm1.prototypes.point_constructor;
         let point = proto.construct(activation, &[x.into(), y.into()])?;
         return Ok(point);
     }

@@ -214,6 +214,7 @@ pub fn exec<'gc>(
                 storage,
                 activation
                     .context
+                    .gc_data
                     .avm2
                     .system_prototypes
                     .as_ref()

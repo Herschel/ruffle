@@ -115,7 +115,14 @@ impl<'gc> TObject<'gc> for ConvolutionFilterObject<'gc> {
             value,
             activation,
             (*self).into(),
-            Some(activation.context.avm1.prototypes.convolution_filter),
+            Some(
+                activation
+                    .context
+                    .gc_data
+                    .avm1
+                    .prototypes
+                    .convolution_filter,
+            ),
         )
     }
 

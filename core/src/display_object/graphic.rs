@@ -36,12 +36,13 @@ impl<'gc> Graphic<'gc> {
         swf_shape: swf::Shape,
         movie: Arc<SwfMovie>,
     ) -> Self {
-        let library = context.library.library_for_movie(movie.clone());
+        let library = context.gc_data.library.library_for_movie(movie.clone());
         let static_data = GraphicStatic {
             id: swf_shape.id,
             bounds: swf_shape.shape_bounds.clone().into(),
             render_handle: Some(
                 context
+                    .player_data
                     .renderer
                     .register_shape((&swf_shape).into(), library),
             ),
@@ -118,7 +119,7 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
         if self.vm_type(context) == AvmType::Avm2 {
             let mut allocator = || {
                 let mut activation = Avm2Activation::from_nothing(context.reborrow());
-                let mut proto = activation.context.avm2.prototypes().shape;
+                let mut proto = activation.context.gc_data.avm2.prototypes().shape;
                 let constr = proto
                     .get_property(
                         proto,

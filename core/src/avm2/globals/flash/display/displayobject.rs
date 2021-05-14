@@ -34,12 +34,14 @@ pub fn instance_init<'gc>(
 
             if let Some((movie, symbol)) = activation
                 .context
+                .gc_data
                 .library
                 .avm2_constructor_registry()
                 .constr_symbol(constructor)
             {
                 let mut child = activation
                     .context
+                    .gc_data
                     .library
                     .library_for_movie_mut(movie)
                     .instantiate_by_id(symbol, activation.context.gc_context)?;
@@ -417,7 +419,7 @@ pub fn stage<'gc>(
     _this: Option<Object<'gc>>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error> {
-    Ok(activation.context.stage.object2())
+    Ok(activation.context.gc_data.stage.object2())
 }
 
 /// Implements `visible`'s getter.
@@ -459,7 +461,7 @@ pub fn mouse_x<'gc>(
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error> {
     if let Some(dobj) = this.and_then(|this| this.as_display_object()) {
-        let local_mouse = dobj.global_to_local(*activation.context.mouse_position);
+        let local_mouse = dobj.global_to_local(activation.context.player_data.mouse_pos);
 
         return Ok(local_mouse.0.to_pixels().into());
     }
@@ -474,7 +476,7 @@ pub fn mouse_y<'gc>(
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error> {
     if let Some(dobj) = this.and_then(|this| this.as_display_object()) {
-        let local_mouse = dobj.global_to_local(*activation.context.mouse_position);
+        let local_mouse = dobj.global_to_local(activation.context.player_data.mouse_pos);
 
         return Ok(local_mouse.1.to_pixels().into());
     }
@@ -559,7 +561,7 @@ pub fn loader_info<'gc>(
                     let obj = LoaderInfoObject::from_movie(
                         movie,
                         root,
-                        activation.context.avm2.prototypes().loaderinfo,
+                        activation.context.gc_data.avm2.prototypes().loaderinfo,
                         activation.context.gc_context,
                     )?;
 
@@ -570,9 +572,9 @@ pub fn loader_info<'gc>(
             }
         }
 
-        if DisplayObject::ptr_eq(dobj, activation.context.stage.into()) {
+        if DisplayObject::ptr_eq(dobj, activation.context.gc_data.stage.into()) {
             return Ok(LoaderInfoObject::from_stage(
-                activation.context.avm2.prototypes().loaderinfo,
+                activation.context.gc_data.avm2.prototypes().loaderinfo,
                 activation.context.gc_context,
             )
             .into());

@@ -101,7 +101,7 @@ pub fn colors<'gc>(
     if let Some(filter) = this.as_gradient_bevel_filter_object() {
         let array = ScriptObject::array(
             activation.context.gc_context,
-            Some(activation.context.avm1.prototypes.array),
+            Some(activation.context.gc_data.avm1.prototypes.array),
         );
 
         let arr = filter.colors();
@@ -165,7 +165,7 @@ pub fn alphas<'gc>(
     if let Some(filter) = this.as_gradient_bevel_filter_object() {
         let array = ScriptObject::array(
             activation.context.gc_context,
-            Some(activation.context.avm1.prototypes.array),
+            Some(activation.context.gc_data.avm1.prototypes.array),
         );
 
         let arr = filter.alphas();
@@ -222,7 +222,7 @@ pub fn ratios<'gc>(
     if let Some(filter) = this.as_gradient_bevel_filter_object() {
         let array = ScriptObject::array(
             activation.context.gc_context,
-            Some(activation.context.avm1.prototypes.array),
+            Some(activation.context.gc_data.avm1.prototypes.array),
         );
 
         let arr = filter.ratios();

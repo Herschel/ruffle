@@ -18,7 +18,7 @@ pub fn constructor<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     let listeners = ScriptObject::array(
         activation.context.gc_context,
-        Some(activation.context.avm1.prototypes().array),
+        Some(activation.context.gc_data.avm1.prototypes().array),
     );
     this.define_value(
         activation.context.gc_context,
@@ -47,18 +47,32 @@ pub fn load_clip<'gc>(
         {
             let fetch = activation
                 .context
+                .player_data
                 .navigator
                 .fetch(&url, RequestOptions::get());
-            let process = activation.context.load_manager.load_movie_into_clip(
-                activation.context.player.clone().unwrap(),
-                DisplayObject::MovieClip(movieclip),
-                fetch,
-                url.to_string(),
-                None,
-                Some(this),
-            );
+            let process = activation
+                .context
+                .gc_data
+                .load_manager
+                .load_movie_into_clip(
+                    activation
+                        .context
+                        .player_data
+                        .self_reference
+                        .clone()
+                        .unwrap(),
+                    DisplayObject::MovieClip(movieclip),
+                    fetch,
+                    url.to_string(),
+                    None,
+                    Some(this),
+                );
 
-            activation.context.navigator.spawn_future(process);
+            activation
+                .context
+                .player_data
+                .navigator
+                .spawn_future(process);
         }
 
         Ok(true.into())

@@ -257,7 +257,7 @@ pub fn align<'gc>(
     _this: Option<Object<'gc>>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error> {
-    let align = activation.context.stage.align();
+    let align = activation.context.gc_data.stage.align();
     let mut s = String::with_capacity(4);
     // Match string values returned by AS.
     // It's possible to have an oxymoronic "TBLR".
@@ -294,6 +294,7 @@ pub fn set_align<'gc>(
         .unwrap_or_default();
     activation
         .context
+        .gc_data
         .stage
         .set_align(&mut activation.context, align);
     Ok(Value::Undefined)
@@ -382,7 +383,7 @@ pub fn display_state<'gc>(
     _this: Option<Object<'gc>>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error> {
-    if activation.context.ui.is_fullscreen() {
+    if activation.context.player_data.ui.is_fullscreen() {
         Ok("fullScreenInteractive".into())
     } else {
         Ok("normal".into())
@@ -397,6 +398,7 @@ pub fn focus<'gc>(
 ) -> Result<Value<'gc>, Error> {
     Ok(activation
         .context
+        .gc_data
         .focus_tracker
         .get()
         .and_then(|focus_dobj| focus_dobj.object2().coerce_to_object(activation).ok())
@@ -410,7 +412,7 @@ pub fn set_focus<'gc>(
     _this: Option<Object<'gc>>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error> {
-    let focus = activation.context.focus_tracker;
+    let focus = activation.context.gc_data.focus_tracker;
     match args.get(0).cloned().unwrap_or(Value::Undefined) {
         Value::Null => focus.set(None, &mut activation.context),
         val => {
@@ -431,7 +433,7 @@ pub fn frame_rate<'gc>(
     _this: Option<Object<'gc>>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error> {
-    Ok((*activation.context.frame_rate).into())
+    Ok(activation.context.player_data.frame_rate.into())
 }
 
 /// Implement `frameRate`'s setter
@@ -445,7 +447,7 @@ pub fn set_frame_rate<'gc>(
         .cloned()
         .unwrap_or(Value::Undefined)
         .coerce_to_number(activation)?;
-    *activation.context.frame_rate = new_frame_rate;
+    activation.context.player_data.frame_rate = new_frame_rate;
 
     Ok(Value::Undefined)
 }
@@ -455,7 +457,7 @@ pub fn show_default_context_menu<'gc>(
     _this: Option<Object<'gc>>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error> {
-    Ok(activation.context.stage.show_menu().into())
+    Ok(activation.context.gc_data.stage.show_menu().into())
 }
 
 pub fn set_show_default_context_menu<'gc>(
@@ -466,6 +468,7 @@ pub fn set_show_default_context_menu<'gc>(
     let show_default_context_menu = args.get(0).unwrap_or(&Value::Undefined).coerce_to_boolean();
     activation
         .context
+        .gc_data
         .stage
         .set_show_menu(&mut activation.context, show_default_context_menu);
     Ok(Value::Undefined)
@@ -479,7 +482,7 @@ pub fn scale_mode<'gc>(
 ) -> Result<Value<'gc>, Error> {
     let scale_mode = AvmString::new(
         activation.context.gc_context,
-        activation.context.stage.scale_mode().to_string(),
+        activation.context.gc_data.stage.scale_mode().to_string(),
     );
     Ok(scale_mode.into())
 }
@@ -498,6 +501,7 @@ pub fn set_scale_mode<'gc>(
     {
         activation
             .context
+            .gc_data
             .stage
             .set_scale_mode(&mut activation.context, scale_mode);
     } else {

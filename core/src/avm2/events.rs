@@ -366,7 +366,7 @@ pub fn dispatch_event_to_target<'gc>(
     event: Object<'gc>,
 ) -> Result<(), Error> {
     avm_debug!(
-        activation.context.avm2,
+        activation.context.gc_data.avm2,
         "Event dispatch: {} to {:?}",
         event.as_event().unwrap().event_type(),
         target

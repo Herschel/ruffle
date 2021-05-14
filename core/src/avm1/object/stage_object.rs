@@ -104,7 +104,7 @@ impl<'gc> StageObject<'gc> {
             .drain(..)
         {
             binding.text_field.clear_bound_stage_object(context);
-            context.unbound_text_fields.push(binding.text_field);
+            context.gc_data.unbound_text_fields.push(binding.text_field);
         }
     }
 
@@ -130,6 +130,7 @@ impl<'gc> StageObject<'gc> {
             if is_level {
                 if let Some(level_id) = name.get(6..).and_then(|v| v.parse::<i32>().ok()) {
                     let level = context
+                        .gc_data
                         .stage
                         .child_by_depth(level_id)
                         .map(|o| o.object())
@@ -168,7 +169,7 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         activation: &mut Activation<'_, 'gc, '_>,
     ) -> Result<Value<'gc>, Error<'gc>> {
         let obj = self.0.read();
-        let props = activation.context.avm1.display_properties;
+        let props = activation.context.gc_data.avm1.display_properties;
         let case_sensitive = activation.is_case_sensitive();
         // Property search order for DisplayObjects:
         if self.has_own_property(activation, name) {
@@ -213,7 +214,7 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         activation: &mut Activation<'_, 'gc, '_>,
     ) -> Result<(), Error<'gc>> {
         let obj = self.0.read();
-        let props = activation.context.avm1.display_properties;
+        let props = activation.context.gc_data.avm1.display_properties;
 
         // Check if a text field is bound to this property and update the text if so.
         let case_sensitive = activation.is_case_sensitive();
@@ -391,6 +392,7 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
 
         if activation
             .context
+            .gc_data
             .avm1
             .display_properties
             .read()
@@ -952,7 +954,7 @@ fn x_mouse<'gc>(
     activation: &mut Activation<'_, 'gc, '_>,
     this: DisplayObject<'gc>,
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let local = this.global_to_local(*activation.context.mouse_position);
+    let local = this.global_to_local(activation.context.player_data.mouse_pos);
     Ok(local.0.to_pixels().into())
 }
 
@@ -960,7 +962,7 @@ fn y_mouse<'gc>(
     activation: &mut Activation<'_, 'gc, '_>,
     this: DisplayObject<'gc>,
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let local = this.global_to_local(*activation.context.mouse_position);
+    let local = this.global_to_local(activation.context.player_data.mouse_pos);
     Ok(local.1.to_pixels().into())
 }
 

@@ -239,7 +239,7 @@ pub struct Activation<'a, 'gc: 'a, 'gc_context: 'a> {
 
 impl Drop for Activation<'_, '_, '_> {
     fn drop(&mut self) {
-        avm_debug!(self.context.avm1, "END {}", self.id);
+        avm_debug!(self.context.gc_data.avm1, "END {}", self.id);
     }
 }
 
@@ -256,7 +256,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         callee: Option<Object<'gc>>,
         arguments: Option<Object<'gc>>,
     ) -> Self {
-        avm_debug!(context.avm1, "START {}", id);
+        avm_debug!(context.gc_data.avm1, "START {}", id);
         Self {
             context,
             id,
@@ -281,7 +281,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         scope: GcCell<'gc, Scope<'gc>>,
     ) -> Activation<'b, 'gc, 'gc_context> {
         let id = self.id.child(name);
-        avm_debug!(self.context.avm1, "START {}", id);
+        avm_debug!(self.context.gc_data.avm1, "START {}", id);
         Activation {
             id,
             context: self.context.reborrow(),
@@ -316,7 +316,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
             Scope::new_local_scope(global_scope, context.gc_context),
         );
         let empty_constant_pool = GcCell::allocate(context.gc_context, Vec::new());
-        avm_debug!(context.avm1, "START {}", id);
+        avm_debug!(context.gc_data.avm1, "START {}", id);
 
         Self {
             context,
@@ -341,9 +341,9 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         context: UpdateContext<'a, 'gc, 'gc_context>,
         id: ActivationIdentifier<'a>,
     ) -> Self {
-        let version = context.swf.version();
-        let globals = context.avm1.global_object_cell();
-        let level0 = context.stage.root_clip();
+        let version = context.player_data.swf.version();
+        let globals = context.gc_data.avm1.global_object_cell();
+        let level0 = context.gc_data.stage.root_clip();
 
         Self::from_nothing(context, id, version, globals, level0)
     }
@@ -356,7 +356,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         swf_version: u8,
         code: SwfSlice,
     ) -> Result<ReturnType<'gc>, Error<'gc>> {
-        let globals = self.context.avm1.globals;
+        let globals = self.context.gc_data.avm1.globals;
         let mut parent_activation = Activation::from_nothing(
             self.context.reborrow(),
             self.id.child("[Actions Parent]"),
@@ -375,7 +375,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
                 clip_obj,
             ),
         );
-        let constant_pool = parent_activation.context.avm1.constant_pool;
+        let constant_pool = parent_activation.context.gc_data.avm1.constant_pool;
         let child_name = parent_activation.id.child(name);
         let mut child_activation = Activation::from_action(
             parent_activation.context.reborrow(),
@@ -408,13 +408,13 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         };
         let global_scope = GcCell::allocate(
             self.context.gc_context,
-            Scope::from_global_object(self.context.avm1.globals),
+            Scope::from_global_object(self.context.gc_data.avm1.globals),
         );
         let child_scope = GcCell::allocate(
             self.context.gc_context,
             Scope::new(global_scope, scope::ScopeClass::Target, clip_obj),
         );
-        let constant_pool = self.context.avm1.constant_pool;
+        let constant_pool = self.context.gc_data.avm1.constant_pool;
         let mut activation = Activation::from_action(
             self.context.reborrow(),
             self.id.child(name),
@@ -451,7 +451,9 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         self.actions_since_timeout_check += 1;
         if self.actions_since_timeout_check >= 2000 {
             self.actions_since_timeout_check = 0;
-            if self.context.update_start.elapsed() >= self.context.max_execution_duration {
+            if self.context.player_data.update_start.elapsed()
+                >= self.context.player_data.max_execution_duration
+            {
                 return Err(Error::ExecutionTimeout);
             }
         }
@@ -461,7 +463,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
             Ok(FrameControl::Return(ReturnType::Implicit))
         } else if let Some(action) = reader.read_action()? {
             avm_debug!(
-                self.context.avm1,
+                self.context.gc_data.avm1,
                 "({}) Action: {:?}",
                 self.id.depth(),
                 action
@@ -610,9 +612,10 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     }
 
     fn action_add(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let a = self.context.avm1.pop();
-        let b = self.context.avm1.pop();
+        let a = self.context.gc_data.avm1.pop();
+        let b = self.context.gc_data.avm1.pop();
         self.context
+            .gc_data
             .avm1
             .push(b.into_number_v1() + a.into_number_v1());
         Ok(FrameControl::Continue)
@@ -620,35 +623,38 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
 
     fn action_add_2(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // ECMA-262 s. 11.6.1
-        let a = self.context.avm1.pop();
-        let b = self.context.avm1.pop();
+        let a = self.context.gc_data.avm1.pop();
+        let b = self.context.gc_data.avm1.pop();
 
         // TODO(Herschel):
         if let Value::String(a) = a {
             let mut s = b.coerce_to_string(self)?.to_string();
             s.push_str(&a);
             self.context
+                .gc_data
                 .avm1
                 .push(AvmString::new(self.context.gc_context, s));
         } else if let Value::String(b) = b {
             let mut b = b.to_string();
             b.push_str(&a.coerce_to_string(self)?);
             self.context
+                .gc_data
                 .avm1
                 .push(AvmString::new(self.context.gc_context, b));
         } else {
             let result = b.coerce_to_f64(self)? + a.coerce_to_f64(self)?;
-            self.context.avm1.push(result);
+            self.context.gc_data.avm1.push(result);
         }
         Ok(FrameControl::Continue)
     }
 
     fn action_and(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // AS1 logical and
-        let a = self.context.avm1.pop();
-        let b = self.context.avm1.pop();
+        let a = self.context.gc_data.avm1.pop();
+        let b = self.context.gc_data.avm1.pop();
         let result = b.as_bool(self.swf_version()) && a.as_bool(self.swf_version());
         self.context
+            .gc_data
             .avm1
             .push(Value::from_bool(result, self.swf_version()));
         Ok(FrameControl::Continue)
@@ -657,7 +663,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     fn action_ascii_to_char(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // In SWF6+, this operates on UTF-16 code units.
         // TODO: In SWF5 and below, this operates on bytes, regardless of the locale encoding.
-        let char_code = u32::from(self.context.avm1.pop().coerce_to_u16(self)?);
+        let char_code = u32::from(self.context.gc_data.avm1.pop().coerce_to_u16(self)?);
         let result = if char_code != 0 {
             // Unpaired surrogates turn into replacement char.
             char::try_from(char_code)
@@ -667,6 +673,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
             String::default()
         };
         self.context
+            .gc_data
             .avm1
             .push(AvmString::new(self.context.gc_context, result));
         Ok(FrameControl::Continue)
@@ -676,20 +683,20 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         // SWF4 ord function
         // In SWF6+, this operates on UTF-16 code units.
         // TODO: In SWF5 and below, this operates on bytes, regardless of the locale.
-        let val = self.context.avm1.pop();
+        let val = self.context.gc_data.avm1.pop();
         let s = val.coerce_to_string(self)?;
         let char_code = s.encode_utf16().next().unwrap_or(0);
         // Unpaired surrogate characters should return the code point for the replacement character.
         // Try to convert the code unit back to a character, which will fail if this is invalid UTF-16 (unpaired surrogate).
         let c = crate::string_utils::utf16_code_unit_to_char(char_code);
-        self.context.avm1.push(u32::from(c));
+        self.context.gc_data.avm1.push(u32::from(c));
         Ok(FrameControl::Continue)
     }
 
     fn action_clone_sprite(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let depth = self.context.avm1.pop();
-        let target = self.context.avm1.pop();
-        let source = self.context.avm1.pop();
+        let depth = self.context.gc_data.avm1.pop();
+        let target = self.context.gc_data.avm1.pop();
+        let source = self.context.gc_data.avm1.pop();
         let start_clip = self.target_clip_or_root()?;
         let source_clip = self.resolve_target_display_object(start_clip, source, true)?;
 
@@ -708,56 +715,56 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     }
 
     fn action_bit_and(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let a = self.context.avm1.pop().coerce_to_i32(self)?;
-        let b = self.context.avm1.pop().coerce_to_i32(self)?;
+        let a = self.context.gc_data.avm1.pop().coerce_to_i32(self)?;
+        let b = self.context.gc_data.avm1.pop().coerce_to_i32(self)?;
         let result = a & b;
-        self.context.avm1.push(result);
+        self.context.gc_data.avm1.push(result);
         Ok(FrameControl::Continue)
     }
 
     fn action_bit_lshift(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let a = self.context.avm1.pop().coerce_to_i32(self)? & 0b11111; // Only 5 bits used for shift count
-        let b = self.context.avm1.pop().coerce_to_i32(self)?;
+        let a = self.context.gc_data.avm1.pop().coerce_to_i32(self)? & 0b11111; // Only 5 bits used for shift count
+        let b = self.context.gc_data.avm1.pop().coerce_to_i32(self)?;
         let result = b << a;
-        self.context.avm1.push(result);
+        self.context.gc_data.avm1.push(result);
         Ok(FrameControl::Continue)
     }
 
     fn action_bit_or(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let a = self.context.avm1.pop().coerce_to_i32(self)?;
-        let b = self.context.avm1.pop().coerce_to_i32(self)?;
+        let a = self.context.gc_data.avm1.pop().coerce_to_i32(self)?;
+        let b = self.context.gc_data.avm1.pop().coerce_to_i32(self)?;
         let result = a | b;
-        self.context.avm1.push(result);
+        self.context.gc_data.avm1.push(result);
         Ok(FrameControl::Continue)
     }
 
     fn action_bit_rshift(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let a = self.context.avm1.pop().coerce_to_i32(self)? & 0b11111; // Only 5 bits used for shift count
-        let b = self.context.avm1.pop().coerce_to_i32(self)?;
+        let a = self.context.gc_data.avm1.pop().coerce_to_i32(self)? & 0b11111; // Only 5 bits used for shift count
+        let b = self.context.gc_data.avm1.pop().coerce_to_i32(self)?;
         let result = b >> a;
-        self.context.avm1.push(result);
+        self.context.gc_data.avm1.push(result);
         Ok(FrameControl::Continue)
     }
 
     fn action_bit_urshift(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let a = self.context.avm1.pop().coerce_to_u32(self)? & 0b11111; // Only 5 bits used for shift count
-        let b = self.context.avm1.pop().coerce_to_u32(self)?;
+        let a = self.context.gc_data.avm1.pop().coerce_to_u32(self)? & 0b11111; // Only 5 bits used for shift count
+        let b = self.context.gc_data.avm1.pop().coerce_to_u32(self)?;
         let result = b >> a;
-        self.context.avm1.push(result);
+        self.context.gc_data.avm1.push(result);
         Ok(FrameControl::Continue)
     }
 
     fn action_bit_xor(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let a = self.context.avm1.pop().coerce_to_i32(self)?;
-        let b = self.context.avm1.pop().coerce_to_i32(self)?;
+        let a = self.context.gc_data.avm1.pop().coerce_to_i32(self)?;
+        let b = self.context.gc_data.avm1.pop().coerce_to_i32(self)?;
         let result = b ^ a;
-        self.context.avm1.push(result);
+        self.context.gc_data.avm1.push(result);
         Ok(FrameControl::Continue)
     }
 
     fn action_call(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // Runs any actions on the given frame.
-        let arg = self.context.avm1.pop();
+        let arg = self.context.gc_data.avm1.pop();
         let target = self.target_clip_or_root()?;
 
         // The parameter can be a frame # or a path to a movie clip with a frame number.
@@ -802,13 +809,13 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     }
 
     fn action_call_function(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let fn_name_value = self.context.avm1.pop();
+        let fn_name_value = self.context.gc_data.avm1.pop();
         let fn_name = fn_name_value.coerce_to_string(self)?;
-        let num_args = self.context.avm1.pop().coerce_to_u32(self)? as usize;
-        let num_args = num_args.min(self.context.avm1.stack.len());
+        let num_args = self.context.gc_data.avm1.pop().coerce_to_u32(self)? as usize;
+        let num_args = num_args.min(self.context.gc_data.avm1.stack.len());
         let mut args = Vec::with_capacity(num_args);
         for _ in 0..num_args {
-            args.push(self.context.avm1.pop());
+            args.push(self.context.gc_data.avm1.pop());
         }
 
         let variable = self.get_variable(&fn_name)?;
@@ -821,7 +828,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
             &args,
         )?;
 
-        self.context.avm1.push(result);
+        self.context.gc_data.avm1.push(result);
 
         // After any function call, execution of this frame stops if the base clip doesn't exist.
         // For example, a _root.gotoAndStop moves the timeline to a frame where the clip was removed.
@@ -829,18 +836,18 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     }
 
     fn action_call_method(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let method_name = self.context.avm1.pop();
-        let object_val = self.context.avm1.pop();
-        let num_args = self.context.avm1.pop().coerce_to_u32(self)? as usize;
-        let num_args = num_args.min(self.context.avm1.stack.len());
+        let method_name = self.context.gc_data.avm1.pop();
+        let object_val = self.context.gc_data.avm1.pop();
+        let num_args = self.context.gc_data.avm1.pop().coerce_to_u32(self)? as usize;
+        let num_args = num_args.min(self.context.gc_data.avm1.stack.len());
         let mut args = Vec::with_capacity(num_args);
         for _ in 0..num_args {
-            args.push(self.context.avm1.pop());
+            args.push(self.context.gc_data.avm1.pop());
         }
 
         // Can not call method on undefined/null.
         if matches!(object_val, Value::Undefined | Value::Null) {
-            self.context.avm1.push(Value::Undefined);
+            self.context.gc_data.avm1.push(Value::Undefined);
             return Ok(FrameControl::Continue);
         }
 
@@ -862,14 +869,14 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
             object.call_method(&method_name.as_str(), &args, self)?
         };
 
-        self.context.avm1.push(result);
+        self.context.gc_data.avm1.push(result);
 
         self.continue_if_base_clip_exists()
     }
 
     fn action_cast_op(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let obj = self.context.avm1.pop();
-        let constr = self.context.avm1.pop().coerce_to_object(self);
+        let obj = self.context.gc_data.avm1.pop();
+        let constr = self.context.gc_data.avm1.pop().coerce_to_object(self);
 
         let is_instance_of = if let Value::Object(obj) = obj {
             let prototype = constr.get("prototype", self)?.coerce_to_object(self);
@@ -879,7 +886,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         };
 
         let ret = if is_instance_of { obj } else { Value::Null };
-        self.context.avm1.push(ret);
+        self.context.gc_data.avm1.push(ret);
 
         Ok(FrameControl::Continue)
     }
@@ -888,7 +895,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         &mut self,
         constant_pool: &[&'_ SwfStr],
     ) -> Result<FrameControl<'gc>, Error<'gc>> {
-        self.context.avm1.constant_pool = GcCell::allocate(
+        self.context.gc_data.avm1.constant_pool = GcCell::allocate(
             self.context.gc_context,
             constant_pool
                 .iter()
@@ -898,14 +905,14 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
                 })
                 .collect(),
         );
-        self.set_constant_pool(self.context.avm1.constant_pool);
+        self.set_constant_pool(self.context.gc_data.avm1.constant_pool);
 
         Ok(FrameControl::Continue)
     }
 
     fn action_decrement(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let a = self.context.avm1.pop().coerce_to_f64(self)?;
-        self.context.avm1.push(a - 1.0);
+        let a = self.context.gc_data.avm1.pop().coerce_to_f64(self)?;
+        self.context.gc_data.avm1.push(a - 1.0);
         Ok(FrameControl::Continue)
     }
 
@@ -931,17 +938,17 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         );
         let prototype = ScriptObject::object(
             self.context.gc_context,
-            Some(self.context.avm1.prototypes.object),
+            Some(self.context.gc_data.avm1.prototypes.object),
         )
         .into();
         let func_obj = FunctionObject::function(
             self.context.gc_context,
             Gc::allocate(self.context.gc_context, func),
-            Some(self.context.avm1.prototypes.function),
+            Some(self.context.gc_data.avm1.prototypes.function),
             prototype,
         );
         if name.is_empty() {
-            self.context.avm1.push(func_obj);
+            self.context.gc_data.avm1.push(func_obj);
         } else {
             self.define(name, func_obj);
         }
@@ -970,17 +977,17 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         );
         let prototype = ScriptObject::object(
             self.context.gc_context,
-            Some(self.context.avm1.prototypes.object),
+            Some(self.context.gc_data.avm1.prototypes.object),
         )
         .into();
         let func_obj = FunctionObject::function(
             self.context.gc_context,
             Gc::allocate(self.context.gc_context, func),
-            Some(self.context.avm1.prototypes.function),
+            Some(self.context.gc_data.avm1.prototypes.function),
             prototype,
         );
         if action_func.name.is_empty() {
-            self.context.avm1.push(func_obj);
+            self.context.gc_data.avm1.push(func_obj);
         } else {
             self.define(&action_func.name.to_str_lossy(self.encoding()), func_obj);
         }
@@ -991,8 +998,8 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     fn action_define_local(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // If the property does not exist on the local object's prototype chain, it is created on the local object.
         // Otherwise, the property is set (including calling virtual setters).
-        let value = self.context.avm1.pop();
-        let name_val = self.context.avm1.pop();
+        let value = self.context.gc_data.avm1.pop();
+        let name_val = self.context.gc_data.avm1.pop();
         let name = name_val.coerce_to_string(self)?;
         let scope = self.scope_cell();
         scope
@@ -1005,7 +1012,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     fn action_define_local_2(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // If the property does not exist on the local object's prototype chain, it is created on the local object.
         // Otherwise, the property is unchanged.
-        let name_val = self.context.avm1.pop();
+        let name_val = self.context.gc_data.avm1.pop();
         let name = name_val.coerce_to_string(self)?;
         let scope = self.scope_cell();
         if !scope.read().locals().has_property(self, &name) {
@@ -1018,61 +1025,62 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     }
 
     fn action_delete(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let name_val = self.context.avm1.pop();
+        let name_val = self.context.gc_data.avm1.pop();
         let name = name_val.coerce_to_string(self)?;
-        let object = self.context.avm1.pop();
+        let object = self.context.gc_data.avm1.pop();
 
         if let Value::Object(object) = object {
             let success = object.delete(self, &name);
-            self.context.avm1.push(success);
+            self.context.gc_data.avm1.push(success);
         } else {
             avm_warn!(self, "Cannot delete property {} from {:?}", name, object);
-            self.context.avm1.push(false);
+            self.context.gc_data.avm1.push(false);
         }
 
         Ok(FrameControl::Continue)
     }
 
     fn action_delete_2(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let name_val = self.context.avm1.pop();
+        let name_val = self.context.gc_data.avm1.pop();
         let name = name_val.coerce_to_string(self)?;
 
         //Fun fact: This isn't in the Adobe SWF19 spec, but this opcode returns
         //a boolean based on if the delete actually deleted something.
         let success = self.scope_cell().read().delete(self, &name);
-        self.context.avm1.push(success);
+        self.context.gc_data.avm1.push(success);
 
         Ok(FrameControl::Continue)
     }
 
     fn action_divide(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // AS1 divide
-        let a = self.context.avm1.pop().coerce_to_f64(self)?;
-        let b = self.context.avm1.pop().coerce_to_f64(self)?;
+        let a = self.context.gc_data.avm1.pop().coerce_to_f64(self)?;
+        let b = self.context.gc_data.avm1.pop().coerce_to_f64(self)?;
 
         // TODO(Herschel): SWF19: "If A is zero, the result NaN, Infinity, or -Infinity is pushed to the in SWF 5 and later.
         // In SWF 4, the result is the string #ERROR#.""
         // Seems to be untrue for SWF v4, I get 1.#INF.
 
-        self.context.avm1.push(b / a);
+        self.context.gc_data.avm1.push(b / a);
         Ok(FrameControl::Continue)
     }
 
     fn action_end_drag(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        *self.context.drag_object = None;
+        self.context.gc_data.drag_object = None;
         Ok(FrameControl::Continue)
     }
 
     fn action_enumerate(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let name_value = self.context.avm1.pop();
+        let name_value = self.context.gc_data.avm1.pop();
         let name = name_value.coerce_to_string(self)?;
-        self.context.avm1.push(Value::Null); // Sentinel that indicates end of enumeration
+        self.context.gc_data.avm1.push(Value::Null); // Sentinel that indicates end of enumeration
         let object: Value<'gc> = self.resolve(&name)?.into();
 
         match object {
             Value::Object(ob) => {
                 for k in ob.get_keys(self).into_iter().rev() {
                     self.context
+                        .gc_data
                         .avm1
                         .push(AvmString::new(self.context.gc_context, k));
                 }
@@ -1084,13 +1092,14 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     }
 
     fn action_enumerate_2(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let value = self.context.avm1.pop();
+        let value = self.context.gc_data.avm1.pop();
 
-        self.context.avm1.push(Value::Null); // Sentinel that indicates end of enumeration
+        self.context.gc_data.avm1.push(Value::Null); // Sentinel that indicates end of enumeration
 
         if let Value::Object(object) = value {
             for k in object.get_keys(self).into_iter().rev() {
                 self.context
+                    .gc_data
                     .avm1
                     .push(AvmString::new(self.context.gc_context, k));
             }
@@ -1104,10 +1113,11 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     #[allow(clippy::float_cmp)]
     fn action_equals(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // AS1 equality
-        let a = self.context.avm1.pop();
-        let b = self.context.avm1.pop();
+        let a = self.context.gc_data.avm1.pop();
+        let b = self.context.gc_data.avm1.pop();
         let result = b.into_number_v1() == a.into_number_v1();
         self.context
+            .gc_data
             .avm1
             .push(Value::from_bool(result, self.swf_version()));
         Ok(FrameControl::Continue)
@@ -1116,16 +1126,16 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     #[allow(clippy::float_cmp)]
     fn action_equals_2(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // Version >=5 equality
-        let a = self.context.avm1.pop();
-        let b = self.context.avm1.pop();
+        let a = self.context.gc_data.avm1.pop();
+        let b = self.context.gc_data.avm1.pop();
         let result = b.abstract_eq(a, self, false)?;
-        self.context.avm1.push(result);
+        self.context.gc_data.avm1.push(result);
         Ok(FrameControl::Continue)
     }
 
     fn action_extends(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let superclass = self.context.avm1.pop().coerce_to_object(self);
-        let subclass = self.context.avm1.pop().coerce_to_object(self);
+        let superclass = self.context.gc_data.avm1.pop().coerce_to_object(self);
+        let subclass = self.context.gc_data.avm1.pop().coerce_to_object(self);
 
         //TODO: What happens if we try to extend an object which has no `prototype`?
         //e.g. `class Whatever extends Object.prototype` or `class Whatever extends 5`
@@ -1160,23 +1170,23 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     }
 
     fn action_get_member(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let name_val = self.context.avm1.pop();
+        let name_val = self.context.gc_data.avm1.pop();
         let name = name_val.coerce_to_string(self)?;
-        let object_val = self.context.avm1.pop();
+        let object_val = self.context.gc_data.avm1.pop();
         let object = object_val.coerce_to_object(self);
 
         let result = object.get(&name, self)?;
-        self.context.avm1.push(result);
+        self.context.gc_data.avm1.push(result);
 
         Ok(FrameControl::Continue)
     }
 
     fn action_get_property(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let prop_index = self.context.avm1.pop().into_number_v1() as usize;
-        let path = self.context.avm1.pop();
+        let prop_index = self.context.gc_data.avm1.pop().into_number_v1() as usize;
+        let path = self.context.gc_data.avm1.pop();
         let ret = if let Some(target) = self.target_clip() {
             if let Some(clip) = self.resolve_target_display_object(target, path, true)? {
-                let display_properties = self.context.avm1.display_properties;
+                let display_properties = self.context.gc_data.avm1.display_properties;
                 let props = display_properties.read();
                 if let Some(property) = props.get_by_index(prop_index) {
                     property.get(self, clip)?
@@ -1192,30 +1202,38 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
             avm_warn!(self, "GetProperty: Invalid base clip");
             Value::Undefined
         };
-        self.context.avm1.push(ret);
+        self.context.gc_data.avm1.push(ret);
         Ok(FrameControl::Continue)
     }
 
     fn action_get_time(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        self.context.times_get_time_called += 1;
+        self.context.player_data.times_get_time_called += 1;
         // heuristic to detect busy loops used for delays and slowly progress fake time
-        if self.context.times_get_time_called >= 20 && self.context.times_get_time_called % 5 == 0 {
-            *self.context.time_offset += 1;
+        if self.context.player_data.times_get_time_called >= 20
+            && self.context.player_data.times_get_time_called % 5 == 0
+        {
+            self.context.player_data.time_offset += 1;
         }
 
-        let time = self.context.navigator.time_since_launch().as_millis() as u32;
+        let time = self
+            .context
+            .player_data
+            .navigator
+            .time_since_launch()
+            .as_millis() as u32;
         self.context
+            .gc_data
             .avm1
-            .push(time.wrapping_add(*self.context.time_offset));
+            .push(time.wrapping_add(self.context.player_data.time_offset));
         Ok(FrameControl::Continue)
     }
 
     fn action_get_variable(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let var_path = self.context.avm1.pop();
+        let var_path = self.context.gc_data.avm1.pop();
         let path = var_path.coerce_to_string(self)?;
 
         let value: Value<'gc> = self.get_variable(&path)?.into();
-        self.context.avm1.push(value);
+        self.context.gc_data.avm1.push(value);
 
         Ok(FrameControl::Continue)
     }
@@ -1231,7 +1249,11 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         if target.starts_with("_level") && target.len() > 6 {
             match target[6..].parse::<i32>() {
                 Ok(level_id) => {
-                    let fetch = self.context.navigator.fetch(&url, RequestOptions::get());
+                    let fetch = self
+                        .context
+                        .player_data
+                        .navigator
+                        .fetch(&url, RequestOptions::get());
                     let level = self.resolve_level(level_id);
 
                     if url.is_empty() {
@@ -1240,15 +1262,15 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
                             mc.replace_with_movie(self.context.gc_context, None)
                         }
                     } else {
-                        let process = self.context.load_manager.load_movie_into_clip(
-                            self.context.player.clone().unwrap(),
+                        let process = self.context.gc_data.load_manager.load_movie_into_clip(
+                            self.context.player_data.self_reference.clone().unwrap(),
                             level,
                             fetch,
                             url,
                             None,
                             None,
                         );
-                        self.context.navigator.spawn_future(process);
+                        self.context.player_data.navigator.spawn_future(process);
                     }
                 }
                 Err(e) => avm_warn!(
@@ -1265,9 +1287,11 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
             let fsargs = target;
             fscommand::handle(fscommand, fsargs, self)?;
         } else {
-            self.context
-                .navigator
-                .navigate_to_url(url.to_owned(), Some(target.to_owned()), None);
+            self.context.player_data.navigator.navigate_to_url(
+                url.to_owned(),
+                Some(target.to_owned()),
+                None,
+            );
         }
 
         Ok(FrameControl::Continue)
@@ -1281,8 +1305,8 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     ) -> Result<FrameControl<'gc>, Error<'gc>> {
         // TODO: Support `LoadVariablesFlag`, `LoadTargetFlag`
         // TODO: What happens if there's only one string?
-        let target = self.context.avm1.pop();
-        let url_val = self.context.avm1.pop();
+        let target = self.context.gc_data.avm1.pop();
+        let url_val = self.context.gc_data.avm1.pop();
         let url = url_val.coerce_to_string(self)?;
 
         if let Some(fscommand) = fscommand::parse(&url) {
@@ -1314,14 +1338,14 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
                     Cow::Borrowed(&url),
                     NavigationMethod::from_send_vars_method(swf_method),
                 );
-                let fetch = self.context.navigator.fetch(&url, opts);
-                let process = self.context.load_manager.load_form_into_object(
-                    self.context.player.clone().unwrap(),
+                let fetch = self.context.player_data.navigator.fetch(&url, opts);
+                let process = self.context.gc_data.load_manager.load_form_into_object(
+                    self.context.player_data.self_reference.clone().unwrap(),
                     target_obj,
                     fetch,
                 );
 
-                self.context.navigator.spawn_future(process);
+                self.context.player_data.navigator.spawn_future(process);
             }
 
             return Ok(FrameControl::Continue);
@@ -1338,16 +1362,16 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
                         mc.replace_with_movie(self.context.gc_context, None)
                     }
                 } else {
-                    let fetch = self.context.navigator.fetch(&url, opts);
-                    let process = self.context.load_manager.load_movie_into_clip(
-                        self.context.player.clone().unwrap(),
+                    let fetch = self.context.player_data.navigator.fetch(&url, opts);
+                    let process = self.context.gc_data.load_manager.load_movie_into_clip(
+                        self.context.player_data.self_reference.clone().unwrap(),
                         clip_target,
                         fetch,
                         url.to_string(),
                         None,
                         None,
                     );
-                    self.context.navigator.spawn_future(process);
+                    self.context.player_data.navigator.spawn_future(process);
                 }
             }
             return Ok(FrameControl::Continue);
@@ -1355,18 +1379,22 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
             // target of `_level#` indicates a `loadMovieNum` call.
             match window_target[6..].parse::<i32>() {
                 Ok(level_id) => {
-                    let fetch = self.context.navigator.fetch(&url, RequestOptions::get());
+                    let fetch = self
+                        .context
+                        .player_data
+                        .navigator
+                        .fetch(&url, RequestOptions::get());
                     let level = self.resolve_level(level_id);
 
-                    let process = self.context.load_manager.load_movie_into_clip(
-                        self.context.player.clone().unwrap(),
+                    let process = self.context.gc_data.load_manager.load_movie_into_clip(
+                        self.context.player_data.self_reference.clone().unwrap(),
                         level,
                         fetch,
                         url.to_string(),
                         None,
                         None,
                     );
-                    self.context.navigator.spawn_future(process);
+                    self.context.player_data.navigator.spawn_future(process);
                 }
                 Err(e) => avm_warn!(
                     self,
@@ -1383,7 +1411,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
                 None => None,
             };
 
-            self.context.navigator.navigate_to_url(
+            self.context.player_data.navigator.navigate_to_url(
                 url.to_string(),
                 Some(window_target.to_string()),
                 vars,
@@ -1415,7 +1443,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         // Param can either be a frame number or a frame label.
         if let Some(clip) = self.target_clip() {
             if let Some(clip) = clip.as_movie_clip() {
-                let frame = self.context.avm1.pop();
+                let frame = self.context.gc_data.avm1.pop();
                 let _ = globals::movie_clip::goto_frame(
                     clip,
                     self,
@@ -1457,7 +1485,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         reader: &mut Reader<'b>,
         data: &'b SwfSlice,
     ) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let val = self.context.avm1.pop();
+        let val = self.context.gc_data.avm1.pop();
         if val.as_bool(self.swf_version()) {
             reader.seek(data.movie.data(), jump_offset);
         }
@@ -1465,57 +1493,61 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     }
 
     fn action_increment(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let a = self.context.avm1.pop().coerce_to_f64(self)?;
-        self.context.avm1.push(a + 1.0);
+        let a = self.context.gc_data.avm1.pop().coerce_to_f64(self)?;
+        self.context.gc_data.avm1.push(a + 1.0);
         Ok(FrameControl::Continue)
     }
 
     fn action_init_array(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let num_elements = self.context.avm1.pop().coerce_to_f64(self)?;
+        let num_elements = self.context.gc_data.avm1.pop().coerce_to_f64(self)?;
         let result = if num_elements < 0.0 || num_elements > std::i32::MAX as f64 {
             // InitArray pops no args and pushes undefined if num_elements is out of range.
             Value::Undefined
         } else {
             let array = ScriptObject::array(
                 self.context.gc_context,
-                Some(self.context.avm1.prototypes.array),
+                Some(self.context.gc_data.avm1.prototypes.array),
             );
             for i in 0..num_elements as usize {
-                array.set_array_element(i, self.context.avm1.pop(), self.context.gc_context);
+                array.set_array_element(
+                    i,
+                    self.context.gc_data.avm1.pop(),
+                    self.context.gc_context,
+                );
             }
             Value::Object(array.into())
         };
 
-        self.context.avm1.push(result);
+        self.context.gc_data.avm1.push(result);
         Ok(FrameControl::Continue)
     }
 
     fn action_init_object(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let num_props = self.context.avm1.pop().coerce_to_f64(self)?;
+        let num_props = self.context.gc_data.avm1.pop().coerce_to_f64(self)?;
         let result = if num_props < 0.0 || num_props > std::i32::MAX as f64 {
             // InitArray pops no args and pushes undefined if num_props is out of range.
             Value::Undefined
         } else {
             let object = ScriptObject::object(
                 self.context.gc_context,
-                Some(self.context.avm1.prototypes.object),
+                Some(self.context.gc_data.avm1.prototypes.object),
             );
             for _ in 0..num_props as usize {
-                let value = self.context.avm1.pop();
-                let name_val = self.context.avm1.pop();
+                let value = self.context.gc_data.avm1.pop();
+                let name_val = self.context.gc_data.avm1.pop();
                 let name = name_val.coerce_to_string(self)?;
                 object.set(&name, value, self)?;
             }
             Value::Object(object.into())
         };
 
-        self.context.avm1.push(result);
+        self.context.gc_data.avm1.push(result);
         Ok(FrameControl::Continue)
     }
 
     fn action_implements_op(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let constructor = self.context.avm1.pop().coerce_to_object(self);
-        let count = self.context.avm1.pop();
+        let constructor = self.context.gc_data.avm1.pop().coerce_to_object(self);
+        let count = self.context.gc_data.avm1.pop();
         // Old Flash Players (at least FP9) used to coerce objects as well. However, this was
         // changed at some point and instead the following is logged:
         // "Parameters of type Object are no longer coerced into the required primitive type - number."
@@ -1526,13 +1558,13 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
             avm_warn!(self, "ImplementsOp: Object not coerced into number");
             0
         };
-        let count = count.min(self.context.avm1.stack.len());
+        let count = count.min(self.context.gc_data.avm1.stack.len());
         let mut interfaces = Vec::with_capacity(count);
 
         // TODO: If one of the interfaces is not an object, do we leave the
         // whole stack dirty, or...?
         for _ in 0..count {
-            interfaces.push(self.context.avm1.pop().coerce_to_object(self));
+            interfaces.push(self.context.gc_data.avm1.pop().coerce_to_object(self));
         }
 
         let prototype = constructor.get("prototype", self)?.coerce_to_object(self);
@@ -1542,8 +1574,8 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     }
 
     fn action_instance_of(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let constr = self.context.avm1.pop().coerce_to_object(self);
-        let obj = self.context.avm1.pop();
+        let constr = self.context.gc_data.avm1.pop().coerce_to_object(self);
+        let obj = self.context.gc_data.avm1.pop();
 
         let is_instance_of = if let Value::Object(obj) = obj {
             let prototype = constr.get("prototype", self)?.coerce_to_object(self);
@@ -1552,7 +1584,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
             false
         };
 
-        self.context.avm1.push(is_instance_of);
+        self.context.gc_data.avm1.push(is_instance_of);
         Ok(FrameControl::Continue)
     }
 
@@ -1568,10 +1600,11 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
 
     fn action_less(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // AS1 less than
-        let a = self.context.avm1.pop();
-        let b = self.context.avm1.pop();
+        let a = self.context.gc_data.avm1.pop();
+        let b = self.context.gc_data.avm1.pop();
         let result = b.into_number_v1() < a.into_number_v1();
         self.context
+            .gc_data
             .avm1
             .push(Value::from_bool(result, self.swf_version()));
         Ok(FrameControl::Continue)
@@ -1579,30 +1612,30 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
 
     fn action_less_2(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // ECMA-262 s. 11.8.1
-        let a = self.context.avm1.pop();
-        let b = self.context.avm1.pop();
+        let a = self.context.gc_data.avm1.pop();
+        let b = self.context.gc_data.avm1.pop();
 
         let result = b.abstract_lt(a, self)?;
 
-        self.context.avm1.push(result);
+        self.context.gc_data.avm1.push(result);
         Ok(FrameControl::Continue)
     }
 
     fn action_greater(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // ECMA-262 s. 11.8.2
-        let a = self.context.avm1.pop();
-        let b = self.context.avm1.pop();
+        let a = self.context.gc_data.avm1.pop();
+        let b = self.context.gc_data.avm1.pop();
 
         let result = a.abstract_lt(b, self)?;
 
-        self.context.avm1.push(result);
+        self.context.gc_data.avm1.push(result);
         Ok(FrameControl::Continue)
     }
 
     fn action_mb_ascii_to_char(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // In SWF6+, this operates on UTF-16 code units.
         // TODO: In SWF5 and below, this operates on locale-dependent characters.
-        let char_code = u32::from(self.context.avm1.pop().coerce_to_u16(self)?);
+        let char_code = u32::from(self.context.gc_data.avm1.pop().coerce_to_u16(self)?);
         let result = if char_code != 0 {
             // Unpaired surrogates turn into replacement char.
             char::try_from(char_code)
@@ -1612,6 +1645,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
             String::default()
         };
         self.context
+            .gc_data
             .avm1
             .push(AvmString::new(self.context.gc_context, result));
         Ok(FrameControl::Continue)
@@ -1621,13 +1655,13 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         // SWF4 mbord function
         // In SWF6+, this operates on UTF-16 code units.
         // TODO: In SWF5 and below, this operates on locale-dependent characters.
-        let val = self.context.avm1.pop();
+        let val = self.context.gc_data.avm1.pop();
         let s = val.coerce_to_string(self)?;
         let char_code = s.encode_utf16().next().unwrap_or(0);
         // Unpaired surrogate characters should return the code point for the replacement character.
         // Try to convert the code unit back to a character, which will fail if this is invalid UTF-16 (unpaired surrogate).
         let c = crate::string_utils::utf16_code_unit_to_char(char_code);
-        self.context.avm1.push(u32::from(c));
+        self.context.gc_data.avm1.push(u32::from(c));
         Ok(FrameControl::Continue)
     }
 
@@ -1635,14 +1669,14 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         // SWF4 mbsubstring
         // In SWF6+, this operates on UTF-16 code units.
         // TODO: In SWF5 and below, this operates on locale-dependent characters.
-        let len = self.context.avm1.pop().coerce_to_i32(self)?;
+        let len = self.context.gc_data.avm1.pop().coerce_to_i32(self)?;
         let len = if len >= 0 { len as usize } else { usize::MAX };
 
         // Index is 1-based for this opcode.
-        let start = self.context.avm1.pop().coerce_to_i32(self)?;
+        let start = self.context.gc_data.avm1.pop().coerce_to_i32(self)?;
         let start = if start >= 1 { start as usize - 1 } else { 0 };
 
-        let val = self.context.avm1.pop();
+        let val = self.context.gc_data.avm1.pop();
         let s = val.coerce_to_string(self)?;
 
         let result = crate::string_utils::utf16_iter_to_string(
@@ -1651,6 +1685,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
                 .take(len),
         );
         self.context
+            .gc_data
             .avm1
             .push(AvmString::new(self.context.gc_context, result));
         Ok(FrameControl::Continue)
@@ -1659,30 +1694,31 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     fn action_mb_string_length(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // In SWF6+, this is the same as String.length (returns number of UTF-16 code units).
         // TODO: In SWF5, this returns the number of characters using the locale encoding.
-        let val = self.context.avm1.pop();
+        let val = self.context.gc_data.avm1.pop();
         let len = val.coerce_to_string(self)?.encode_utf16().count();
-        self.context.avm1.push(len as f64);
+        self.context.gc_data.avm1.push(len as f64);
         Ok(FrameControl::Continue)
     }
 
     fn action_multiply(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let a = self.context.avm1.pop().coerce_to_f64(self)?;
-        let b = self.context.avm1.pop().coerce_to_f64(self)?;
-        self.context.avm1.push(a * b);
+        let a = self.context.gc_data.avm1.pop().coerce_to_f64(self)?;
+        let b = self.context.gc_data.avm1.pop().coerce_to_f64(self)?;
+        self.context.gc_data.avm1.push(a * b);
         Ok(FrameControl::Continue)
     }
 
     fn action_modulo(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // TODO: Wrong operands?
-        let a = self.context.avm1.pop().coerce_to_f64(self)?;
-        let b = self.context.avm1.pop().coerce_to_f64(self)?;
-        self.context.avm1.push(b % a);
+        let a = self.context.gc_data.avm1.pop().coerce_to_f64(self)?;
+        let b = self.context.gc_data.avm1.pop().coerce_to_f64(self)?;
+        self.context.gc_data.avm1.push(b % a);
         Ok(FrameControl::Continue)
     }
 
     fn action_not(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let val = !self.context.avm1.pop().as_bool(self.swf_version());
+        let val = !self.context.gc_data.avm1.pop().as_bool(self.swf_version());
         self.context
+            .gc_data
             .avm1
             .push(Value::from_bool(val, self.swf_version()));
         Ok(FrameControl::Continue)
@@ -1702,18 +1738,18 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     }
 
     fn action_new_method(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let method_name = self.context.avm1.pop();
-        let object_val = self.context.avm1.pop();
-        let num_args = self.context.avm1.pop().coerce_to_u32(self)? as usize;
-        let num_args = num_args.min(self.context.avm1.stack.len());
+        let method_name = self.context.gc_data.avm1.pop();
+        let object_val = self.context.gc_data.avm1.pop();
+        let num_args = self.context.gc_data.avm1.pop().coerce_to_u32(self)? as usize;
+        let num_args = num_args.min(self.context.gc_data.avm1.stack.len());
         let mut args = Vec::with_capacity(num_args);
         for _ in 0..num_args {
-            args.push(self.context.avm1.pop());
+            args.push(self.context.gc_data.avm1.pop());
         }
 
         // Can not call method on undefined/null.
         if matches!(object_val, Value::Undefined | Value::Null) {
-            self.context.avm1.push(Value::Undefined);
+            self.context.gc_data.avm1.push(Value::Undefined);
             return Ok(FrameControl::Continue);
         }
 
@@ -1743,35 +1779,36 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
             }
         };
 
-        self.context.avm1.push(result);
+        self.context.gc_data.avm1.push(result);
 
         self.continue_if_base_clip_exists()
     }
 
     fn action_new_object(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let fn_name_val = self.context.avm1.pop();
+        let fn_name_val = self.context.gc_data.avm1.pop();
         let fn_name = fn_name_val.coerce_to_string(self)?;
-        let num_args = self.context.avm1.pop().coerce_to_u32(self)? as usize;
-        let num_args = num_args.min(self.context.avm1.stack.len());
+        let num_args = self.context.gc_data.avm1.pop().coerce_to_u32(self)? as usize;
+        let num_args = num_args.min(self.context.gc_data.avm1.stack.len());
         let mut args = Vec::with_capacity(num_args);
         for _ in 0..num_args {
-            args.push(self.context.avm1.pop());
+            args.push(self.context.gc_data.avm1.pop());
         }
 
         let name_value: Value<'gc> = self.resolve(&fn_name)?.into();
         let constructor = name_value.coerce_to_object(self);
         let this = constructor.construct(self, &args)?;
-        self.context.avm1.push(this);
+        self.context.gc_data.avm1.push(this);
 
         self.continue_if_base_clip_exists()
     }
 
     fn action_or(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // AS1 logical or
-        let a = self.context.avm1.pop();
-        let b = self.context.avm1.pop();
+        let a = self.context.gc_data.avm1.pop();
+        let b = self.context.gc_data.avm1.pop();
         let result = b.as_bool(self.swf_version()) || a.as_bool(self.swf_version());
         self.context
+            .gc_data
             .avm1
             .push(Value::from_bool(result, self.swf_version()));
         Ok(FrameControl::Continue)
@@ -1804,7 +1841,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     }
 
     fn action_pop(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        self.context.avm1.pop();
+        self.context.gc_data.avm1.pop();
         Ok(FrameControl::Continue)
     }
 
@@ -1840,33 +1877,33 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
                     }
                 }
             };
-            self.context.avm1.push(value);
+            self.context.gc_data.avm1.push(value);
         }
         Ok(FrameControl::Continue)
     }
 
     fn action_push_duplicate(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let val = self.context.avm1.pop();
-        self.context.avm1.push(val);
-        self.context.avm1.push(val);
+        let val = self.context.gc_data.avm1.pop();
+        self.context.gc_data.avm1.push(val);
+        self.context.gc_data.avm1.push(val);
         Ok(FrameControl::Continue)
     }
 
     fn action_random_number(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // A max value < 0 will always return 0,
         // and the max value gets converted into an i32, so any number > 2^31 - 1 will return 0.
-        let max = self.context.avm1.pop().into_number_v1() as i32;
+        let max = self.context.gc_data.avm1.pop().into_number_v1() as i32;
         let val = if max > 0 {
-            self.context.rng.gen_range(0..max)
+            self.context.player_data.rng.gen_range(0..max)
         } else {
             0
         };
-        self.context.avm1.push(val);
+        self.context.gc_data.avm1.push(val);
         Ok(FrameControl::Continue)
     }
 
     fn action_remove_sprite(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let target = self.context.avm1.pop();
+        let target = self.context.gc_data.avm1.pop();
         let start_clip = self.target_clip_or_root()?;
         let target_clip = self.resolve_target_display_object(start_clip, target, true)?;
 
@@ -1879,29 +1916,29 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     }
 
     fn action_return(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let return_value = self.context.avm1.pop();
+        let return_value = self.context.gc_data.avm1.pop();
 
         Ok(FrameControl::Return(ReturnType::Explicit(return_value)))
     }
 
     fn action_set_member(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let value = self.context.avm1.pop();
-        let name_val = self.context.avm1.pop();
+        let value = self.context.gc_data.avm1.pop();
+        let name_val = self.context.gc_data.avm1.pop();
         let name = name_val.coerce_to_string(self)?;
 
-        let object = self.context.avm1.pop().coerce_to_object(self);
+        let object = self.context.gc_data.avm1.pop().coerce_to_object(self);
         object.set(&name, value, self)?;
 
         Ok(FrameControl::Continue)
     }
 
     fn action_set_property(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let value = self.context.avm1.pop();
-        let prop_index = self.context.avm1.pop().coerce_to_u32(self)? as usize;
-        let path = self.context.avm1.pop();
+        let value = self.context.gc_data.avm1.pop();
+        let prop_index = self.context.gc_data.avm1.pop().coerce_to_u32(self)? as usize;
+        let path = self.context.gc_data.avm1.pop();
         if let Some(target) = self.target_clip() {
             if let Some(clip) = self.resolve_target_display_object(target, path, true)? {
-                let display_properties = self.context.avm1.display_properties;
+                let display_properties = self.context.gc_data.avm1.display_properties;
                 let props = display_properties.read();
                 if let Some(property) = props.get_by_index(prop_index) {
                     property.set(self, clip, value)?;
@@ -1917,8 +1954,8 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
 
     fn action_set_variable(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // Flash 4-style variable
-        let value = self.context.avm1.pop();
-        let var_path_val = self.context.avm1.pop();
+        let value = self.context.gc_data.avm1.pop();
+        let var_path_val = self.context.gc_data.avm1.pop();
         let var_path = var_path_val.coerce_to_string(self)?;
         self.set_variable(&var_path, value)?;
         Ok(FrameControl::Continue)
@@ -1927,10 +1964,10 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     #[allow(clippy::float_cmp)]
     fn action_strict_equals(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // The same as normal equality but types must match
-        let a = self.context.avm1.pop();
-        let b = self.context.avm1.pop();
+        let a = self.context.gc_data.avm1.pop();
+        let b = self.context.gc_data.avm1.pop();
         let result = a == b;
-        self.context.avm1.push(result);
+        self.context.gc_data.avm1.push(result);
         Ok(FrameControl::Continue)
     }
 
@@ -1954,7 +1991,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
                 target,
                 base_clip.path()
             );
-            self.context.log.avm_trace(&message);
+            self.context.player_data.log.avm_trace(&message);
 
             // When SetTarget has an invalid target, subsequent GetVariables act
             // as if they are targeting root, but subsequent Play/Stop/etc.
@@ -1976,7 +2013,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     }
 
     fn action_set_target2(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let target = self.context.avm1.pop();
+        let target = self.context.gc_data.avm1.pop();
         match target {
             Value::String(target) => {
                 return self.action_set_target(&target);
@@ -2014,25 +2051,25 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     }
 
     fn action_stack_swap(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let a = self.context.avm1.pop();
-        let b = self.context.avm1.pop();
-        self.context.avm1.push(a);
-        self.context.avm1.push(b);
+        let a = self.context.gc_data.avm1.pop();
+        let b = self.context.gc_data.avm1.pop();
+        self.context.gc_data.avm1.push(a);
+        self.context.gc_data.avm1.push(b);
         Ok(FrameControl::Continue)
     }
 
     fn action_start_drag(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let target = self.context.avm1.pop();
+        let target = self.context.gc_data.avm1.pop();
         let start_clip = self.target_clip_or_root()?;
         let display_object = self.resolve_target_display_object(start_clip, target, true)?;
         if let Some(display_object) = display_object {
-            let lock_center = self.context.avm1.pop();
-            let constrain = self.context.avm1.pop().as_bool(self.swf_version());
+            let lock_center = self.context.gc_data.avm1.pop();
+            let constrain = self.context.gc_data.avm1.pop().as_bool(self.swf_version());
             if constrain {
-                let y2 = self.context.avm1.pop();
-                let x2 = self.context.avm1.pop();
-                let y1 = self.context.avm1.pop();
-                let x1 = self.context.avm1.pop();
+                let y2 = self.context.gc_data.avm1.pop();
+                let x2 = self.context.gc_data.avm1.pop();
+                let y1 = self.context.gc_data.avm1.pop();
+                let x1 = self.context.gc_data.avm1.pop();
                 start_drag(display_object, self, &[lock_center, x1, y1, x2, y2]);
             } else {
                 start_drag(display_object, self, &[lock_center]);
@@ -2063,8 +2100,8 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
 
     fn action_store_register(&mut self, register: u8) -> Result<FrameControl<'gc>, Error<'gc>> {
         // The value must remain on the stack.
-        let val = self.context.avm1.pop();
-        self.context.avm1.push(val);
+        let val = self.context.gc_data.avm1.pop();
+        self.context.gc_data.avm1.push(val);
         self.set_current_register(register, val);
 
         Ok(FrameControl::Continue)
@@ -2073,10 +2110,17 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     fn action_string_add(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // SWFv4 string concatenation
         // TODO(Herschel): Result with non-string operands?
-        let a = self.context.avm1.pop();
-        let mut b = self.context.avm1.pop().coerce_to_string(self)?.to_string();
+        let a = self.context.gc_data.avm1.pop();
+        let mut b = self
+            .context
+            .gc_data
+            .avm1
+            .pop()
+            .coerce_to_string(self)?
+            .to_string();
         b.push_str(&a.coerce_to_string(self)?);
         self.context
+            .gc_data
             .avm1
             .push(AvmString::new(self.context.gc_context, b));
         Ok(FrameControl::Continue)
@@ -2084,10 +2128,11 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
 
     fn action_string_equals(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // AS1 strcmp
-        let a = self.context.avm1.pop();
-        let b = self.context.avm1.pop();
+        let a = self.context.gc_data.avm1.pop();
+        let b = self.context.gc_data.avm1.pop();
         let result = b.coerce_to_string(self)? == a.coerce_to_string(self)?;
         self.context
+            .gc_data
             .avm1
             .push(Value::from_bool(result, self.swf_version()));
         Ok(FrameControl::Continue)
@@ -2099,14 +2144,14 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         // TODO: In SWF5 and below, this operates on bytes, regardless of the locale encoding.
 
         // len < 0 returns to the end of the string.
-        let len = self.context.avm1.pop().coerce_to_i32(self)?;
+        let len = self.context.gc_data.avm1.pop().coerce_to_i32(self)?;
         let len = if len >= 0 { len as usize } else { usize::MAX };
 
         // Index is 1-based for this opcode.
-        let start = self.context.avm1.pop().coerce_to_i32(self)?;
+        let start = self.context.gc_data.avm1.pop().coerce_to_i32(self)?;
         let start = if start >= 1 { start as usize - 1 } else { 0 };
 
-        let val = self.context.avm1.pop();
+        let val = self.context.gc_data.avm1.pop();
         let s = val.coerce_to_string(self)?;
 
         let result = crate::string_utils::utf16_iter_to_string(
@@ -2115,6 +2160,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
                 .take(len),
         );
         self.context
+            .gc_data
             .avm1
             .push(AvmString::new(self.context.gc_context, result));
         Ok(FrameControl::Continue)
@@ -2122,14 +2168,15 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
 
     fn action_string_greater(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // AS1 strcmp
-        let a = self.context.avm1.pop();
-        let b = self.context.avm1.pop();
+        let a = self.context.gc_data.avm1.pop();
+        let b = self.context.gc_data.avm1.pop();
         // This is specifically a non-UTF8 aware comparison.
         let result = b
             .coerce_to_string(self)?
             .bytes()
             .gt(a.coerce_to_string(self)?.bytes());
         self.context
+            .gc_data
             .avm1
             .push(Value::from_bool(result, self.swf_version()));
         Ok(FrameControl::Continue)
@@ -2139,45 +2186,46 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         // AS1 strlen
         // In SWF6+, this is the same as String.length (returns number of UTF-16 code units).
         // TODO: In SWF5, this returns the byte length, even though the encoding is locale dependent.
-        let val = self.context.avm1.pop();
+        let val = self.context.gc_data.avm1.pop();
         let len = val.coerce_to_string(self)?.encode_utf16().count();
-        self.context.avm1.push(len);
+        self.context.gc_data.avm1.push(len);
         Ok(FrameControl::Continue)
     }
 
     fn action_string_less(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // AS1 strcmp
-        let a = self.context.avm1.pop();
-        let b = self.context.avm1.pop();
+        let a = self.context.gc_data.avm1.pop();
+        let b = self.context.gc_data.avm1.pop();
         // This is specifically a non-UTF8 aware comparison.
         let result = b
             .coerce_to_string(self)?
             .bytes()
             .lt(a.coerce_to_string(self)?.bytes());
         self.context
+            .gc_data
             .avm1
             .push(Value::from_bool(result, self.swf_version()));
         Ok(FrameControl::Continue)
     }
 
     fn action_subtract(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let a = self.context.avm1.pop().coerce_to_f64(self)?;
-        let b = self.context.avm1.pop().coerce_to_f64(self)?;
-        self.context.avm1.push(b - a);
+        let a = self.context.gc_data.avm1.pop().coerce_to_f64(self)?;
+        let b = self.context.gc_data.avm1.pop().coerce_to_f64(self)?;
+        self.context.gc_data.avm1.push(b - a);
         Ok(FrameControl::Continue)
     }
 
     fn action_target_path(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         // Prints out the dot-path for the parameter.
         // Parameter must be a display object (not a string path).
-        let param = self.context.avm1.pop().coerce_to_object(self);
+        let param = self.context.gc_data.avm1.pop().coerce_to_object(self);
         let ret: Value<'gc> = if let Some(display_object) = param.as_display_object() {
             let path = display_object.path();
             AvmString::new(self.context.gc_context, path).into()
         } else {
             Value::Undefined
         };
-        self.context.avm1.push(ret);
+        self.context.gc_data.avm1.push(ret);
         Ok(FrameControl::Continue)
     }
 
@@ -2187,34 +2235,35 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     }
 
     fn action_to_integer(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let val = self.context.avm1.pop();
+        let val = self.context.gc_data.avm1.pop();
 
         let value = match val {
             Value::Undefined | Value::Null | Value::Object(_) => 0.0,
             _ => val.coerce_to_f64(self)?,
         };
 
-        self.context.avm1.push(value.trunc());
+        self.context.gc_data.avm1.push(value.trunc());
         Ok(FrameControl::Continue)
     }
 
     fn action_to_number(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let val = self.context.avm1.pop().coerce_to_f64(self)?;
-        self.context.avm1.push(val);
+        let val = self.context.gc_data.avm1.pop().coerce_to_f64(self)?;
+        self.context.gc_data.avm1.push(val);
         Ok(FrameControl::Continue)
     }
 
     fn action_to_string(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let val = self.context.avm1.pop();
+        let val = self.context.gc_data.avm1.pop();
         let string = val.coerce_to_string(self)?;
         self.context
+            .gc_data
             .avm1
             .push(AvmString::new(self.context.gc_context, string.to_string()));
         Ok(FrameControl::Continue)
     }
 
     fn action_trace(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let val = self.context.avm1.pop();
+        let val = self.context.gc_data.avm1.pop();
         // trace always prints "undefined" even though SWF6 and below normally
         // coerce undefined to "".
         let out = if val == Value::Undefined {
@@ -2222,13 +2271,14 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         } else {
             val.coerce_to_string(self)?
         };
-        self.context.log.avm_trace(&out);
+        self.context.player_data.log.avm_trace(&out);
         Ok(FrameControl::Continue)
     }
 
     fn action_type_of(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let type_of = self.context.avm1.pop().type_of();
+        let type_of = self.context.gc_data.avm1.pop().type_of();
         self.context
+            .gc_data
             .avm1
             .push(AvmString::new(self.context.gc_context, type_of.to_string()));
         Ok(FrameControl::Continue)
@@ -2256,7 +2306,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         r: &mut Reader<'_>,
     ) -> Result<FrameControl<'gc>, Error<'gc>> {
         // TODO(Herschel): Always true for now.
-        let _frame_num = self.context.avm1.pop().coerce_to_f64(self)? as u16;
+        let _frame_num = self.context.gc_data.avm1.pop().coerce_to_f64(self)? as u16;
         let loaded = true;
         if !loaded {
             // Note that the offset is given in # of actions, NOT in bytes.
@@ -2268,9 +2318,9 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
 
     #[allow(unused_variables)]
     fn action_throw(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let value = self.context.avm1.pop();
+        let value = self.context.gc_data.avm1.pop();
         avm_debug!(
-            self.context.avm1,
+            self.context.gc_data.avm1,
             "Thrown exception: {}",
             value
                 .coerce_to_string(self)
@@ -2280,14 +2330,14 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     }
 
     fn action_with(&mut self, code: SwfSlice) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let value = self.context.avm1.pop();
+        let value = self.context.gc_data.avm1.pop();
         match value {
             // Undefined/null with is ignored.
             Value::Undefined | Value::Null => {
                 // Mimic Flash's error output.
                 let message =
                     "Error: A 'with' action failed because the specified object did not exist.\n";
-                self.context.log.avm_trace(&message);
+                self.context.player_data.log.avm_trace(&message);
                 Ok(FrameControl::Continue)
             }
 
@@ -2369,6 +2419,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
             self.local_register(id).unwrap_or(Value::Undefined)
         } else {
             self.context
+                .gc_data
                 .avm1
                 .registers
                 .get(id as usize)
@@ -2383,7 +2434,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     pub fn set_current_register(&mut self, id: u8, value: Value<'gc>) {
         if self.has_local_register(id) {
             self.set_local_register(id, value);
-        } else if let Some(v) = self.context.avm1.registers.get_mut(id as usize) {
+        } else if let Some(v) = self.context.gc_data.avm1.registers.get_mut(id as usize) {
             *v = value;
         }
     }
@@ -2842,7 +2893,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
     /// If the level does not exist, then it will be created and instantiated
     /// with a script object.
     pub fn resolve_level(&mut self, level_id: i32) -> DisplayObject<'gc> {
-        if let Some(level) = self.context.stage.child_by_depth(level_id) {
+        if let Some(level) = self.context.gc_data.stage.child_by_depth(level_id) {
             level
         } else {
             let level: DisplayObject<'_> = MovieClip::new(
@@ -2854,6 +2905,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
             level.set_depth(self.context.gc_context, level_id as i32);
             level.set_default_root_name(&mut self.context);
             self.context
+                .gc_data
                 .stage
                 .replace_at_depth(&mut self.context, level, level_id);
             level.post_instantiation(&mut self.context, level, None, Instantiator::Movie, false);

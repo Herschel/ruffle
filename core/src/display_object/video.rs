@@ -245,9 +245,11 @@ impl<'gc> Video<'gc> {
                         data: &movie.data()[*slice_start..*slice_end],
                         frame_id,
                     };
-                    context
-                        .video
-                        .decode_video_stream_frame(*stream, encframe, context.renderer)
+                    context.player_data.video.decode_video_stream_frame(
+                        *stream,
+                        encframe,
+                        &mut *context.player_data.renderer,
+                    )
                 }
                 None => {
                     if let Some((_old_id, old_frame)) = read.decoded_frame {
@@ -296,7 +298,7 @@ impl<'gc> TDisplayObject<'gc> for Video<'gc> {
                 movie,
                 frames,
             } => {
-                let stream = context.video.register_video_stream(
+                let stream = context.player_data.video.register_video_stream(
                     streamdef.num_frames.into(),
                     (streamdef.width, streamdef.height),
                     streamdef.codec,
@@ -314,7 +316,7 @@ impl<'gc> TDisplayObject<'gc> for Video<'gc> {
                 let mut keyframes = BTreeSet::new();
 
                 for (frame_id, (frame_start, frame_end)) in frames {
-                    let dep = context.video.preload_video_stream_frame(
+                    let dep = context.player_data.video.preload_video_stream_frame(
                         stream,
                         EncodedFrame {
                             codec: streamdef.codec,
@@ -350,13 +352,13 @@ impl<'gc> TDisplayObject<'gc> for Video<'gc> {
         write.keyframes = keyframes;
 
         if write.object.is_none() {
-            let library = context.library.library_for_movie_mut(movie);
+            let library = context.gc_data.library.library_for_movie_mut(movie);
             let vm_type = library.avm_type();
             if vm_type == AvmType::Avm1 {
                 let object: Avm1Object<'_> = Avm1StageObject::for_display_object(
                     context.gc_context,
                     display_object,
-                    Some(context.avm1.prototypes().video),
+                    Some(context.gc_data.avm1.prototypes().video),
                 )
                 .into();
                 write.object = Some(object.into());
@@ -378,7 +380,7 @@ impl<'gc> TDisplayObject<'gc> for Video<'gc> {
             let object: Avm2Object<'_> = Avm2StageObject::for_display_object(
                 context.gc_context,
                 (*self).into(),
-                context.avm2.prototypes().video,
+                context.gc_data.avm2.prototypes().video,
             )
             .into();
             self.0.write(context.gc_context).object = Some(object.into());

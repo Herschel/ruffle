@@ -10,7 +10,7 @@ fn create_point<'gc>(
     activation: &mut Activation<'_, 'gc, '_>,
     coords: (f64, f64),
 ) -> Result<Value<'gc>, Error> {
-    let proto = activation.context.avm2.prototypes().point;
+    let proto = activation.context.gc_data.avm2.prototypes().point;
     let args = [Value::Number(coords.0), Value::Number(coords.1)];
     let new_point = proto.construct(activation, &args)?;
     instance_init(activation, Some(new_point), &args)?;

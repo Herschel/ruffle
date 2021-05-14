@@ -25,8 +25,14 @@ pub fn instance_init<'gc>(
         activation.super_init(this, &[])?;
 
         if this.as_display_object().is_none() {
-            let movie = Arc::new(SwfMovie::empty(activation.context.swf.version()));
-            let library = activation.context.library.library_for_movie_mut(movie);
+            let movie = Arc::new(SwfMovie::empty(
+                activation.context.player_data.swf.version(),
+            ));
+            let library = activation
+                .context
+                .gc_data
+                .library
+                .library_for_movie_mut(movie);
             library.force_avm_type(AvmType::Avm2);
 
             let new_do = Graphic::new_with_avm2(&mut activation.context, this);
@@ -62,7 +68,7 @@ pub fn graphics<'gc>(
                 activation,
             )? {
                 Value::Undefined | Value::Null => {
-                    let graphics_proto = activation.context.avm2.prototypes().graphics;
+                    let graphics_proto = activation.context.gc_data.avm2.prototypes().graphics;
                     let graphics = Value::from(StageObject::for_display_object(
                         activation.context.gc_context,
                         dobj,

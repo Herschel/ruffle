@@ -11,7 +11,12 @@ pub fn get_available<'gc>(
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    Ok(activation.context.external_interface.available().into())
+    Ok(activation
+        .context
+        .gc_data
+        .external_interface
+        .available()
+        .into())
 }
 
 pub fn add_callback<'gc>(
@@ -28,7 +33,7 @@ pub fn add_callback<'gc>(
     let method = args.get(2).unwrap();
 
     if let Value::Object(method) = method {
-        activation.context.external_interface.add_callback(
+        activation.context.gc_data.external_interface.add_callback(
             name.to_string(),
             Callback::Avm1 {
                 this,
@@ -51,7 +56,12 @@ pub fn call<'gc>(
     }
 
     let name = args.get(0).unwrap().coerce_to_string(activation)?;
-    if let Some(method) = activation.context.external_interface.get_method_for(&name) {
+    if let Some(method) = activation
+        .context
+        .gc_data
+        .external_interface
+        .get_method_for(&name)
+    {
         let mut external_args = Vec::with_capacity(args.len() - 1);
         for arg in &args[1..] {
             external_args.push(ExternalValue::from_avm1(activation, arg.to_owned())?);

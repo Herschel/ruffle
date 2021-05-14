@@ -37,7 +37,9 @@ pub fn call<'gc>(
     myargs: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let this = match myargs.get(0) {
-        Some(Value::Undefined) | Some(Value::Null) | None => activation.context.avm1.globals,
+        Some(Value::Undefined) | Some(Value::Null) | None => {
+            activation.context.gc_data.avm1.globals
+        }
         Some(this_val) => this_val.coerce_to_object(activation),
     };
     let empty = [];
@@ -68,7 +70,9 @@ pub fn apply<'gc>(
     myargs: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let this = match myargs.get(0) {
-        Some(Value::Undefined) | Some(Value::Null) | None => activation.context.avm1.globals,
+        Some(Value::Undefined) | Some(Value::Null) | None => {
+            activation.context.gc_data.avm1.globals
+        }
         Some(this_val) => this_val.coerce_to_object(activation),
     };
     let args_object = myargs.get(1).cloned().unwrap_or(Value::Undefined);

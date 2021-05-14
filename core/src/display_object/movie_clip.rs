@@ -255,7 +255,7 @@ impl<'gc> MovieClip<'gc> {
                 };
 
                 let movie = self.movie().unwrap();
-                let library = context.library.library_for_movie_mut(movie);
+                let library = context.gc_data.library.library_for_movie_mut(movie);
                 if let Err(e) = library.check_avm_type(avm_type) {
                     log::warn!("{}", e);
                 }
@@ -445,7 +445,7 @@ impl<'gc> MovieClip<'gc> {
             TagCode::ScriptLimits => self
                 .0
                 .write(context.gc_context)
-                .script_limits(reader, context.avm1),
+                .script_limits(reader, &mut context.gc_data.avm1),
             TagCode::SoundStreamHead => self.0.write(context.gc_context).preload_sound_stream_head(
                 context,
                 reader,
@@ -481,7 +481,7 @@ impl<'gc> MovieClip<'gc> {
 
         // Finalize audio stream.
         if let Some(stream) = preload_stream_handle {
-            if let Some(sound) = context.audio.preload_sound_stream_end(stream) {
+            if let Some(sound) = context.player_data.audio.preload_sound_stream_end(stream) {
                 static_data.audio_stream_handle = Some(sound);
             }
         }
@@ -498,7 +498,7 @@ impl<'gc> MovieClip<'gc> {
         tag_len: usize,
     ) -> DecodeResult {
         let movie = self.movie().unwrap();
-        let library = context.library.library_for_movie_mut(movie);
+        let library = context.gc_data.library.library_for_movie_mut(movie);
         if let Err(e) = library.check_avm_type(AvmType::Avm1) {
             log::warn!("{}", e);
 
@@ -525,7 +525,7 @@ impl<'gc> MovieClip<'gc> {
 
         Avm1::run_stack_frame_for_init_action(
             self.into(),
-            context.swf.header().version,
+            context.player_data.swf.header().version,
             slice,
             context,
         );
@@ -541,7 +541,7 @@ impl<'gc> MovieClip<'gc> {
         tag_len: usize,
     ) -> DecodeResult {
         let movie = self.movie().unwrap();
-        let library = context.library.library_for_movie_mut(movie);
+        let library = context.gc_data.library.library_for_movie_mut(movie);
         if let Err(e) = library.check_avm_type(AvmType::Avm2) {
             log::warn!("{}", e);
 
@@ -600,6 +600,7 @@ impl<'gc> MovieClip<'gc> {
             {
                 let library = activation
                     .context
+                    .gc_data
                     .library
                     .library_for_movie_mut(movie.clone());
                 let domain = library.avm2_domain();
@@ -611,12 +612,14 @@ impl<'gc> MovieClip<'gc> {
                     Ok(constr) => {
                         activation
                             .context
+                            .gc_data
                             .library
                             .avm2_constructor_registry_mut()
                             .set_constr_symbol(constr, movie.clone(), id);
 
                         let library = activation
                             .context
+                            .gc_data
                             .library
                             .library_for_movie_mut(movie.clone());
 
@@ -1135,6 +1138,7 @@ impl<'gc> MovieClip<'gc> {
         copy_previous_properties: bool,
     ) -> Option<DisplayObject<'gc>> {
         if let Ok(child) = context
+            .gc_data
             .library
             .library_for_movie_mut(self.movie().unwrap()) //TODO
             .instantiate_by_id(id, context.gc_context)
@@ -1408,8 +1412,8 @@ impl<'gc> MovieClip<'gc> {
     ) {
         //TODO: This will break horribly when AVM2 starts touching the display list
         if self.0.read().object.is_none() {
-            let version = context.swf.version();
-            let globals = context.avm1.global_object_cell();
+            let version = context.player_data.swf.version();
+            let globals = context.gc_data.avm1.global_object_cell();
             let avm1_constructor = self.0.read().get_registered_avm1_constructor(context);
 
             // If we are running within the AVM, this must be an immediate action.
@@ -1453,7 +1457,7 @@ impl<'gc> MovieClip<'gc> {
             let object: Avm1Object<'gc> = StageObject::for_display_object(
                 context.gc_context,
                 display_object,
-                Some(context.avm1.prototypes().movie_clip),
+                Some(context.gc_data.avm1.prototypes().movie_clip),
             )
             .into();
             if let Some(init_object) = init_object {
@@ -1478,7 +1482,7 @@ impl<'gc> MovieClip<'gc> {
 
             for clip_action in mc.clip_actions().iter() {
                 match clip_action.event {
-                    ClipEvent::Initialize => context.action_queue.queue_actions(
+                    ClipEvent::Initialize => context.gc_data.action_queue.queue_actions(
                         display_object,
                         ActionType::Initialize {
                             bytecode: clip_action.action_data.clone(),
@@ -1490,7 +1494,7 @@ impl<'gc> MovieClip<'gc> {
                 }
             }
 
-            context.action_queue.queue_actions(
+            context.gc_data.action_queue.queue_actions(
                 display_object,
                 ActionType::Construct {
                     constructor: avm1_constructor,
@@ -1507,7 +1511,7 @@ impl<'gc> MovieClip<'gc> {
         // If this text field has a variable set, initialize text field binding.
         Avm1::run_with_stack_frame_for_display_object(
             self.into(),
-            context.swf.version(),
+            context.player_data.swf.version(),
             context,
             |activation| {
                 self.bind_text_field_variables(activation);
@@ -1527,7 +1531,7 @@ impl<'gc> MovieClip<'gc> {
     ) {
         let mut constructor = self.0.read().avm2_constructor.unwrap_or_else(|| {
             let mut activation = Avm2Activation::from_nothing(context.reborrow());
-            let mut mc_proto = activation.context.avm2.prototypes().movieclip;
+            let mut mc_proto = activation.context.gc_data.avm2.prototypes().movieclip;
             mc_proto
                 .get_property(
                     mc_proto,
@@ -1574,7 +1578,7 @@ impl<'gc> MovieClip<'gc> {
     fn construct_as_avm2_object(self, context: &mut UpdateContext<'_, 'gc, '_>) {
         let mut constructor = self.0.read().avm2_constructor.unwrap_or_else(|| {
             let mut activation = Avm2Activation::from_nothing(context.reborrow());
-            let mut mc_proto = activation.context.avm2.prototypes().movieclip;
+            let mut mc_proto = activation.context.gc_data.avm2.prototypes().movieclip;
             mc_proto
                 .get_property(
                     mc_proto,
@@ -2078,7 +2082,7 @@ impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
 
         let had_focus = self.0.read().has_focus;
         if had_focus {
-            let tracker = context.focus_tracker;
+            let tracker = context.gc_data.focus_tracker;
             tracker.set(None, context);
         }
 
@@ -2225,7 +2229,7 @@ impl<'gc> MovieClipData<'gc> {
 
         if let Some(AvmObject::Avm1(object)) = self.object {
             // TODO: What's the behavior for loaded SWF files?
-            if context.swf.version() >= 5 {
+            if context.player_data.swf.version() >= 5 {
                 for clip_action in self
                     .clip_actions
                     .iter()
@@ -2235,7 +2239,7 @@ impl<'gc> MovieClipData<'gc> {
                     if matches!(clip_action.event, ClipEvent::KeyPress { .. }) {
                         handled = ClipEventResult::Handled;
                     }
-                    context.action_queue.queue_actions(
+                    context.gc_data.action_queue.queue_actions(
                         self_display_object,
                         ActionType::Normal {
                             bytecode: clip_action.action_data.clone(),
@@ -2246,11 +2250,11 @@ impl<'gc> MovieClipData<'gc> {
 
                 // Queue ActionScript-defined event handlers after the SWF defined ones.
                 // (e.g., clip.onEnterFrame = foo).
-                if context.swf.version() >= 6 {
+                if context.player_data.swf.version() >= 6 {
                     if let Some(name) = event.method_name() {
                         // Keyboard events don't fire their methods unless the movieclip has focus (#2120).
                         if !event.is_key_event() || self.has_focus {
-                            context.action_queue.queue_actions(
+                            context.gc_data.action_queue.queue_actions(
                                 self_display_object,
                                 ActionType::Method {
                                     object,
@@ -2285,11 +2289,11 @@ impl<'gc> MovieClipData<'gc> {
     ) {
         // Finally, queue any loaders that may be waiting for this event.
         if let ClipEvent::Load = event {
-            context.load_manager.movie_clip_on_load(
+            context.gc_data.load_manager.movie_clip_on_load(
                 self_display_object,
                 //TODO: This should have an AVM2 onload path.
                 self.object.and_then(|o| o.as_avm1_object().ok()),
-                context.action_queue,
+                &mut context.gc_data.action_queue,
             );
         }
     }
@@ -2328,7 +2332,7 @@ impl<'gc> MovieClipData<'gc> {
     ) -> Option<Avm1Object<'gc>> {
         let symbol_name = self.static_data.exported_name.borrow();
         let symbol_name = symbol_name.as_ref()?;
-        let library = context.library.library_for_movie_mut(self.movie());
+        let library = context.gc_data.library.library_for_movie_mut(self.movie());
         let registry = library.avm1_constructor_registry()?;
         let ctor = registry.get(symbol_name)?;
         Some(Avm1Object::FunctionObject(ctor))
@@ -2350,6 +2354,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
     ) -> DecodeResult {
         let define_bits_lossless = reader.read_define_bits_lossless(version)?;
         let bitmap_info = context
+            .player_data
             .renderer
             .register_bitmap_png(&define_bits_lossless)?;
         let bitmap = crate::display_object::Bitmap::new(
@@ -2360,6 +2365,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
             bitmap_info.height,
         );
         context
+            .gc_data
             .library
             .library_for_movie_mut(self.movie())
             .register_character(define_bits_lossless.id, Character::Bitmap(bitmap));
@@ -2393,6 +2399,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
         let id = swf_shape.id;
         let graphic = Graphic::from_swf_tag(context, swf_shape, movie);
         context
+            .gc_data
             .library
             .library_for_movie_mut(self.movie())
             .register_character(id, Character::Graphic(graphic));
@@ -2461,6 +2468,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
         if let Some(stream) = stream {
             let data = &reader.get_ref()[..tag_len];
             context
+                .player_data
                 .audio
                 .preload_sound_stream_block(stream, cur_frame, data);
         }
@@ -2478,7 +2486,10 @@ impl<'gc, 'a> MovieClipData<'gc> {
         _version: u8,
     ) -> DecodeResult {
         let audio_stream_info = reader.read_sound_stream_head()?;
-        *stream = context.audio.preload_sound_stream_head(&audio_stream_info);
+        *stream = context
+            .player_data
+            .audio
+            .preload_sound_stream_head(&audio_stream_info);
         static_data.audio_stream_info = Some(audio_stream_info);
         Ok(())
     }
@@ -2489,7 +2500,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
         reader: &mut SwfStream<'a>,
     ) -> DecodeResult {
         let settings = reader.read_csm_text_settings()?;
-        let library = context.library.library_for_movie_mut(self.movie());
+        let library = context.gc_data.library.library_for_movie_mut(self.movie());
         match library.character_by_id(settings.id) {
             Some(Character::Text(text)) => {
                 text.set_render_settings(context.gc_context, settings.into());
@@ -2521,7 +2532,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
     ) -> DecodeResult {
         match reader.read_video_frame()? {
             Tag::VideoFrame(vframe) => {
-                let library = context.library.library_for_movie_mut(self.movie());
+                let library = context.gc_data.library.library_for_movie_mut(self.movie());
                 match library.character_by_id(vframe.stream_id) {
                     Some(Character::Video(mut v)) => {
                         v.preload_swf_frame(vframe, context);
@@ -2551,9 +2562,10 @@ impl<'gc, 'a> MovieClipData<'gc> {
         let data_len = tag_len - 2;
         let mut jpeg_data = Vec::with_capacity(data_len);
         reader.get_mut().read_to_end(&mut jpeg_data)?;
-        let bitmap_info = context.renderer.register_bitmap_jpeg(
+        let bitmap_info = context.player_data.renderer.register_bitmap_jpeg(
             &jpeg_data,
             context
+                .gc_data
                 .library
                 .library_for_movie_mut(self.movie())
                 .jpeg_tables(),
@@ -2566,6 +2578,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
             bitmap_info.height,
         );
         context
+            .gc_data
             .library
             .library_for_movie_mut(self.movie())
             .register_character(id, Character::Bitmap(bitmap));
@@ -2584,7 +2597,10 @@ impl<'gc, 'a> MovieClipData<'gc> {
         let data_len = tag_len - 2;
         let mut jpeg_data = Vec::with_capacity(data_len);
         reader.get_mut().read_to_end(&mut jpeg_data)?;
-        let bitmap_info = context.renderer.register_bitmap_jpeg_2(&jpeg_data)?;
+        let bitmap_info = context
+            .player_data
+            .renderer
+            .register_bitmap_jpeg_2(&jpeg_data)?;
         let bitmap = crate::display_object::Bitmap::new(
             context,
             id,
@@ -2593,6 +2609,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
             bitmap_info.height,
         );
         context
+            .gc_data
             .library
             .library_for_movie_mut(self.movie())
             .register_character(id, Character::Bitmap(bitmap));
@@ -2623,6 +2640,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
             .take(alpha_len as u64)
             .read_to_end(&mut alpha_data)?;
         let bitmap_info = context
+            .player_data
             .renderer
             .register_bitmap_jpeg_3(&jpeg_data, &alpha_data)?;
         let bitmap = Bitmap::new(
@@ -2633,6 +2651,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
             bitmap_info.height,
         );
         context
+            .gc_data
             .library
             .library_for_movie_mut(self.movie())
             .register_character(id, Character::Bitmap(bitmap));
@@ -2664,6 +2683,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
             .take(alpha_len as u64)
             .read_to_end(&mut alpha_data)?;
         let bitmap_info = context
+            .player_data
             .renderer
             .register_bitmap_jpeg_3(&jpeg_data, &alpha_data)?;
         let bitmap = Bitmap::new(
@@ -2674,6 +2694,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
             bitmap_info.height,
         );
         context
+            .gc_data
             .library
             .library_for_movie_mut(self.movie())
             .register_character(id, Character::Bitmap(bitmap));
@@ -2690,10 +2711,11 @@ impl<'gc, 'a> MovieClipData<'gc> {
         let button = Button::from_swf_tag(
             &swf_button,
             &self.static_data.swf,
-            &context.library,
+            &context.gc_data.library,
             context.gc_context,
         );
         context
+            .gc_data
             .library
             .library_for_movie_mut(self.movie())
             .register_character(swf_button.id, Character::Button(button));
@@ -2710,10 +2732,11 @@ impl<'gc, 'a> MovieClipData<'gc> {
         let button = Button::from_swf_tag(
             &swf_button,
             &self.static_data.swf,
-            &context.library,
+            &context.gc_data.library,
             context.gc_context,
         );
         context
+            .gc_data
             .library
             .library_for_movie_mut(self.movie())
             .register_character(swf_button.id, Character::Button(button));
@@ -2729,6 +2752,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
     ) -> DecodeResult {
         let button_colors = reader.read_define_button_cxform(tag_len)?;
         if let Some(button) = context
+            .gc_data
             .library
             .library_for_movie_mut(self.movie())
             .character_by_id(button_colors.id)
@@ -2758,6 +2782,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
     ) -> DecodeResult {
         let button_sounds = reader.read_define_button_sound()?;
         if let Some(button) = context
+            .gc_data
             .library
             .library_for_movie_mut(self.movie())
             .character_by_id(button_sounds.id)
@@ -2789,6 +2814,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
         let swf_edit_text = reader.read_define_edit_text()?;
         let edit_text = EditText::from_swf_tag(context, self.movie(), swf_edit_text);
         context
+            .gc_data
             .library
             .library_for_movie_mut(self.movie())
             .register_character(edit_text.id(), Character::EditText(edit_text));
@@ -2828,12 +2854,13 @@ impl<'gc, 'a> MovieClipData<'gc> {
         };
         let font_object = Font::from_swf_tag(
             context.gc_context,
-            context.renderer,
+            &mut *context.player_data.renderer,
             &font,
             reader.encoding(),
         )
         .unwrap();
         context
+            .gc_data
             .library
             .library_for_movie_mut(self.movie())
             .register_character(font.id, Character::Font(font_object));
@@ -2849,12 +2876,13 @@ impl<'gc, 'a> MovieClipData<'gc> {
         let font = reader.read_define_font_2(2)?;
         let font_object = Font::from_swf_tag(
             context.gc_context,
-            context.renderer,
+            &mut *context.player_data.renderer,
             &font,
             reader.encoding(),
         )
         .unwrap();
         context
+            .gc_data
             .library
             .library_for_movie_mut(self.movie())
             .register_character(font.id, Character::Font(font_object));
@@ -2870,12 +2898,13 @@ impl<'gc, 'a> MovieClipData<'gc> {
         let font = reader.read_define_font_2(3)?;
         let font_object = Font::from_swf_tag(
             context.gc_context,
-            context.renderer,
+            &mut *context.player_data.renderer,
             &font,
             reader.encoding(),
         )
         .unwrap();
         context
+            .gc_data
             .library
             .library_for_movie_mut(self.movie())
             .register_character(font.id, Character::Font(font_object));
@@ -2900,8 +2929,9 @@ impl<'gc, 'a> MovieClipData<'gc> {
         reader: &mut SwfStream<'a>,
     ) -> DecodeResult {
         let sound = reader.read_define_sound()?;
-        if let Ok(handle) = context.audio.register_sound(&sound) {
+        if let Ok(handle) = context.player_data.audio.register_sound(&sound) {
             context
+                .gc_data
                 .library
                 .library_for_movie_mut(self.movie())
                 .register_character(sound.id, Character::Sound(handle));
@@ -2925,6 +2955,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
                 let id = streamdef.id;
                 let video = Video::from_swf_tag(self.movie(), streamdef, context.gc_context);
                 context
+                    .gc_data
                     .library
                     .library_for_movie_mut(self.movie())
                     .register_character(id, Character::Video(video));
@@ -2962,6 +2993,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
         movie_clip.preload(context, morph_shapes);
 
         context
+            .gc_data
             .library
             .library_for_movie_mut(self.movie())
             .register_character(id, Character::MovieClip(movie_clip));
@@ -2979,6 +3011,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
         let text = reader.read_define_text(version)?;
         let text_object = Text::from_swf_tag(context, self.movie(), &text);
         context
+            .gc_data
             .library
             .library_for_movie_mut(self.movie())
             .register_character(text.id, Character::Text(text_object));
@@ -3005,6 +3038,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
         for export in exports {
             let name = export.name.to_str_lossy(reader.encoding());
             let character = context
+                .gc_data
                 .library
                 .library_for_movie_mut(self.movie())
                 .register_export(export.id, &name);
@@ -3054,6 +3088,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
         let mut jpeg_data = Vec::with_capacity(tag_len);
         reader.get_mut().read_to_end(&mut jpeg_data)?;
         context
+            .gc_data
             .library
             .library_for_movie_mut(self.movie())
             .set_jpeg_tables(jpeg_data);
@@ -3100,7 +3135,7 @@ impl<'gc, 'a> MovieClip<'gc> {
         tag_len: usize,
     ) -> DecodeResult {
         let movie = self.movie().unwrap();
-        let library = context.library.library_for_movie_mut(movie);
+        let library = context.gc_data.library.library_for_movie_mut(movie);
         if let Err(e) = library.check_avm_type(AvmType::Avm1) {
             log::warn!("{}", e);
 
@@ -3120,7 +3155,7 @@ impl<'gc, 'a> MovieClip<'gc> {
                     "Invalid source or tag length when running action",
                 )
             })?;
-        context.action_queue.queue_actions(
+        context.gc_data.action_queue.queue_actions(
             self_display_object,
             ActionType::Normal { bytecode: slice },
             false,
@@ -3205,8 +3240,9 @@ impl<'gc, 'a> MovieClip<'gc> {
         // Also note that a loaded child SWF could change background color only
         // if parent SWF is missing SetBackgroundColor tag.
         let background_color = reader.read_rgb()?;
-        if context.stage.background_color().is_none() {
+        if context.gc_data.stage.background_color().is_none() {
             context
+                .gc_data
                 .stage
                 .set_background_color(context.gc_context, Some(background_color));
         }
@@ -3256,6 +3292,7 @@ impl<'gc, 'a> MovieClip<'gc> {
     ) -> DecodeResult {
         let start_sound = reader.read_start_sound_1()?;
         if let Some(handle) = context
+            .gc_data
             .library
             .library_for_movie_mut(self.movie().unwrap()) // TODO
             .get_sound(start_sound.id)

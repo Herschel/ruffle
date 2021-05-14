@@ -157,6 +157,7 @@ impl<'gc> TDisplayObject<'gc> for Text<'gc> {
                 height = block.height.unwrap_or(height);
 
                 if let Some(font) = context
+                    .gc_data
                     .library
                     .library_for_movie(self.movie().unwrap())
                     .unwrap()

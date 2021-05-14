@@ -317,29 +317,30 @@ impl<'gc> Stage<'gc> {
             ty: Twips::from_pixels(ty),
         };
 
-        self.0.write(context.gc_context).view_bounds = if self.should_letterbox(context.ui) {
-            // Letterbox: movie area
-            BoundingBox {
-                x_min: Twips::zero(),
-                y_min: Twips::zero(),
-                x_max: Twips::from_pixels(movie_width),
-                y_max: Twips::from_pixels(movie_height),
-                valid: true,
-            }
-        } else {
-            // No letterbox: full visible stage area
-            let margin_left = tx / scale_x;
-            let margin_right = (width_delta - tx) / scale_x;
-            let margin_top = ty / scale_y;
-            let margin_bottom = (height_delta - ty) / scale_y;
-            BoundingBox {
-                x_min: Twips::from_pixels(-margin_left),
-                y_min: Twips::from_pixels(-margin_top),
-                x_max: Twips::from_pixels(movie_width + margin_right),
-                y_max: Twips::from_pixels(movie_height + margin_bottom),
-                valid: true,
-            }
-        };
+        self.0.write(context.gc_context).view_bounds =
+            if self.should_letterbox(&mut *context.player_data.ui) {
+                // Letterbox: movie area
+                BoundingBox {
+                    x_min: Twips::zero(),
+                    y_min: Twips::zero(),
+                    x_max: Twips::from_pixels(movie_width),
+                    y_max: Twips::from_pixels(movie_height),
+                    valid: true,
+                }
+            } else {
+                // No letterbox: full visible stage area
+                let margin_left = tx / scale_x;
+                let margin_right = (width_delta - tx) / scale_x;
+                let margin_top = ty / scale_y;
+                let margin_bottom = (height_delta - ty) / scale_y;
+                BoundingBox {
+                    x_min: Twips::from_pixels(-margin_left),
+                    y_min: Twips::from_pixels(-margin_top),
+                    x_max: Twips::from_pixels(movie_width + margin_right),
+                    y_max: Twips::from_pixels(movie_height + margin_bottom),
+                    valid: true,
+                }
+            };
 
         // Fire resize handler if stage size has changed.
         if scale_mode == StageScaleMode::NoScale && stage_size_changed {
@@ -433,11 +434,14 @@ impl<'gc> Stage<'gc> {
     fn fire_resize_event(self, context: &mut UpdateContext<'_, 'gc, '_>) {
         // This event fires immediately when scaleMode is changed;
         // it doesn't queue up.
-        let library = context.library.library_for_movie_mut(context.swf.clone());
+        let library = context
+            .gc_data
+            .library
+            .library_for_movie_mut(context.player_data.swf.clone());
         if library.avm_type() == AvmType::Avm1 {
             crate::avm1::Avm1::notify_system_listeners(
                 self.root_clip(),
-                context.swf.version(),
+                context.player_data.swf.version(),
                 context,
                 "Stage",
                 "onResize",
@@ -465,7 +469,7 @@ impl<'gc> TDisplayObject<'gc> for Stage<'gc> {
         _instantiated_by: Instantiator,
         _run_frame: bool,
     ) {
-        let stage_proto = context.avm2.prototypes().stage;
+        let stage_proto = context.gc_data.avm2.prototypes().stage;
         let avm2_stage =
             Avm2StageObject::for_display_object(context.gc_context, (*self).into(), stage_proto);
 
@@ -474,7 +478,7 @@ impl<'gc> TDisplayObject<'gc> for Stage<'gc> {
         // This is necessary for EventDispatcher super-constructor to run.
         use crate::avm2::TObject;
         let mut activation = Avm2Activation::from_nothing(context.reborrow());
-        let mut proto = activation.context.avm2.prototypes().stage;
+        let mut proto = activation.context.gc_data.avm2.prototypes().stage;
         if let Err(e) = proto
             .get_property(
                 proto,

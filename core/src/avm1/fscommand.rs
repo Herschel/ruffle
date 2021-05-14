@@ -20,6 +20,7 @@ pub fn handle<'gc>(
 ) -> Result<(), Error<'gc>> {
     if !activation
         .context
+        .gc_data
         .external_interface
         .invoke_fs_command(command, args)
     {

@@ -897,7 +897,7 @@ pub trait TDisplayObject<'gc>:
         enter_frame_evt.set_bubbles(false);
         enter_frame_evt.set_cancelable(false);
 
-        let dobject_proto = context.avm2.prototypes().display_object;
+        let dobject_proto = context.gc_data.avm2.prototypes().display_object;
 
         if let Err(e) = Avm2::broadcast_event(context, enter_frame_evt, dobject_proto) {
             log::error!(
@@ -928,7 +928,7 @@ pub trait TDisplayObject<'gc>:
         frame_constructed_evt.set_bubbles(false);
         frame_constructed_evt.set_cancelable(false);
 
-        let dobject_proto = context.avm2.prototypes().display_object;
+        let dobject_proto = context.gc_data.avm2.prototypes().display_object;
 
         if let Err(e) = Avm2::broadcast_event(context, frame_constructed_evt, dobject_proto) {
             log::error!(
@@ -953,7 +953,7 @@ pub trait TDisplayObject<'gc>:
         exit_frame_evt.set_bubbles(false);
         exit_frame_evt.set_cancelable(false);
 
-        let dobject_proto = context.avm2.prototypes().display_object;
+        let dobject_proto = context.gc_data.avm2.prototypes().display_object;
 
         if let Err(e) = Avm2::broadcast_event(context, exit_frame_evt, dobject_proto) {
             log::error!(
@@ -1164,7 +1164,7 @@ pub trait TDisplayObject<'gc>:
     /// This function panics if the display object has no defining movie.
     fn vm_type(&self, context: &mut UpdateContext<'_, 'gc, '_>) -> AvmType {
         let movie = self.movie().unwrap();
-        let library = context.library.library_for_movie_mut(movie);
+        let library = context.gc_data.library.library_for_movie_mut(movie);
 
         library.avm_type()
     }
@@ -1234,7 +1234,7 @@ pub trait TDisplayObject<'gc>:
         }
 
         let ancestor = ancestor.unwrap_or_else(|| self.into());
-        DisplayObject::ptr_eq(ancestor, context.stage.into())
+        DisplayObject::ptr_eq(ancestor, context.gc_data.stage.into())
     }
 
     /// Obtain the top-most parent of the display tree hierarchy, or some kind
@@ -1254,9 +1254,10 @@ pub trait TDisplayObject<'gc>:
     /// Assigns a default instance name `instanceN` to this object.
     fn set_default_instance_name(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
         if self.name().is_empty() {
-            let name = format!("instance{}", *context.instance_counter);
+            let name = format!("instance{}", context.player_data.instance_counter);
             self.set_name(context.gc_context, &name);
-            *context.instance_counter = context.instance_counter.wrapping_add(1);
+            context.player_data.instance_counter =
+                context.player_data.instance_counter.wrapping_add(1);
         }
     }
 
@@ -1268,7 +1269,11 @@ pub trait TDisplayObject<'gc>:
         let movie = self
             .movie()
             .expect("All roots should have an associated movie");
-        let vm_type = context.library.library_for_movie_mut(movie).avm_type();
+        let vm_type = context
+            .gc_data
+            .library
+            .library_for_movie_mut(movie)
+            .avm_type();
 
         if matches!(vm_type, AvmType::Avm2) {
             self.set_name(context.gc_context, &format!("root{}", self.depth() + 1));
@@ -1281,12 +1286,16 @@ pub trait TDisplayObject<'gc>:
         // Check all unbound text fields to see if they apply to this object.
         // TODO: Replace with `Vec::drain_filter` when stable.
         let mut i = 0;
-        let mut len = activation.context.unbound_text_fields.len();
+        let mut len = activation.context.gc_data.unbound_text_fields.len();
         while i < len {
-            if activation.context.unbound_text_fields[i]
+            if activation.context.gc_data.unbound_text_fields[i]
                 .try_bind_text_field_variable(activation, false)
             {
-                activation.context.unbound_text_fields.swap_remove(i);
+                activation
+                    .context
+                    .gc_data
+                    .unbound_text_fields
+                    .swap_remove(i);
                 len -= 1;
             } else {
                 i += 1;

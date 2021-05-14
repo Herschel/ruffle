@@ -42,10 +42,10 @@ fn serialize_value<'gc>(
         Value::String(s) => Some(AmfValue::String(s.to_string())),
         Value::Object(o) => {
             // Don't attempt to serialize functions
-            let function = activation.context.avm1.prototypes.function;
-            let array = activation.context.avm1.prototypes.array;
-            let xml = activation.context.avm1.prototypes.xml_node;
-            let date = activation.context.avm1.prototypes.date;
+            let function = activation.context.gc_data.avm1.prototypes.function;
+            let array = activation.context.gc_data.avm1.prototypes.array;
+            let xml = activation.context.gc_data.avm1.prototypes.xml_node;
+            let date = activation.context.gc_data.avm1.prototypes.date;
 
             if !o
                 .is_instance_of(activation, o, function)
@@ -109,7 +109,7 @@ fn deserialize_value<'gc>(activation: &mut Activation<'_, 'gc, '_>, val: &AmfVal
         AmfValue::String(s) => Value::String(AvmString::new(activation.context.gc_context, s)),
         AmfValue::Bool(b) => Value::Bool(*b),
         AmfValue::ECMAArray(_, associative, len) => {
-            let array_constructor = activation.context.avm1.prototypes.array_constructor;
+            let array_constructor = activation.context.gc_data.avm1.prototypes.array_constructor;
             if let Ok(Value::Object(obj)) =
                 array_constructor.construct(activation, &[Value::Number(*len as f64)])
             {
@@ -135,7 +135,7 @@ fn deserialize_value<'gc>(activation: &mut Activation<'_, 'gc, '_>, val: &AmfVal
         }
         AmfValue::Object(elements, _) => {
             // Deserialize Object
-            let obj_proto = activation.context.avm1.prototypes.object;
+            let obj_proto = activation.context.gc_data.avm1.prototypes.object;
             if let Ok(obj) = obj_proto.create_bare_object(activation, obj_proto) {
                 for entry in elements {
                     let value = deserialize_value(activation, entry.value());
@@ -152,7 +152,7 @@ fn deserialize_value<'gc>(activation: &mut Activation<'_, 'gc, '_>, val: &AmfVal
             }
         }
         AmfValue::Date(time, _) => {
-            let date_proto = activation.context.avm1.prototypes.date_constructor;
+            let date_proto = activation.context.gc_data.avm1.prototypes.date_constructor;
 
             if let Ok(Value::Object(obj)) =
                 date_proto.construct(activation, &[Value::Number(*time)])
@@ -163,7 +163,7 @@ fn deserialize_value<'gc>(activation: &mut Activation<'_, 'gc, '_>, val: &AmfVal
             }
         }
         AmfValue::XML(content, _) => {
-            let xml_proto = activation.context.avm1.prototypes.xml_constructor;
+            let xml_proto = activation.context.gc_data.avm1.prototypes.xml_constructor;
 
             if let Ok(Value::Object(obj)) = xml_proto.construct(
                 activation,
@@ -187,7 +187,7 @@ fn deserialize_lso<'gc>(
     activation: &mut Activation<'_, 'gc, '_>,
     lso: &Lso,
 ) -> Result<Object<'gc>, Error<'gc>> {
-    let obj_proto = activation.context.avm1.prototypes.object;
+    let obj_proto = activation.context.gc_data.avm1.prototypes.object;
     let obj = obj_proto.create_bare_object(activation, obj_proto)?;
 
     for child in &lso.body {
@@ -232,7 +232,7 @@ fn deserialize_object_json<'gc>(
     activation: &mut Activation<'_, 'gc, '_>,
 ) -> Value<'gc> {
     // Deserialize Object
-    let obj_proto = activation.context.avm1.prototypes.object;
+    let obj_proto = activation.context.gc_data.avm1.prototypes.object;
     if let Ok(obj) = obj_proto.create_bare_object(activation, obj_proto) {
         for entry in json_obj.iter() {
             let value = recursive_deserialize_json(entry.1.clone(), activation);
@@ -254,7 +254,7 @@ fn deserialize_array_json<'gc>(
     mut json_obj: json::object::Object,
     activation: &mut Activation<'_, 'gc, '_>,
 ) -> Value<'gc> {
-    let array_constructor = activation.context.avm1.prototypes.array_constructor;
+    let array_constructor = activation.context.gc_data.avm1.prototypes.array_constructor;
     let len = json_obj
         .get("length")
         .and_then(JsonValue::as_i32)
@@ -391,12 +391,17 @@ pub fn get_local<'gc>(
     }
 
     // Check if this is referencing an existing shared object
-    if let Some(so) = activation.context.shared_objects.get(&full_name) {
+    if let Some(so) = activation.context.gc_data.shared_objects.get(&full_name) {
         return Ok(Value::Object(*so));
     }
 
     // Data property only should exist when created with getLocal/Remote
-    let constructor = activation.context.avm1.prototypes.shared_object_constructor;
+    let constructor = activation
+        .context
+        .gc_data
+        .avm1
+        .prototypes
+        .shared_object_constructor;
     let this = constructor
         .construct(activation, &[])?
         .coerce_to_object(activation);
@@ -408,7 +413,7 @@ pub fn get_local<'gc>(
     let mut data = Value::Undefined;
 
     // Load the data object from storage if it existed prior
-    if let Some(saved) = activation.context.storage.get(&full_name) {
+    if let Some(saved) = activation.context.player_data.storage.get(&full_name) {
         // Attempt to load it as an Lso
         if let Ok(lso) = flash_lso::read::Reader::default().parse(&saved) {
             data = deserialize_lso(activation, &lso)?.into();
@@ -424,7 +429,7 @@ pub fn get_local<'gc>(
 
     if data == Value::Undefined {
         // No data; create a fresh data object.
-        let prototype = activation.context.avm1.prototypes.object;
+        let prototype = activation.context.gc_data.avm1.prototypes.object;
         data = prototype.create_bare_object(activation, prototype)?.into();
     }
 
@@ -435,7 +440,11 @@ pub fn get_local<'gc>(
         Attribute::DONT_DELETE,
     );
 
-    activation.context.shared_objects.insert(full_name, this);
+    activation
+        .context
+        .gc_data
+        .shared_objects
+        .insert(full_name, this);
 
     Ok(this.into())
 }
@@ -563,7 +572,7 @@ pub fn clear<'gc>(
     let so = this.as_shared_object().unwrap();
     let name = so.get_name();
 
-    activation.context.storage.remove_key(&name);
+    activation.context.player_data.storage.remove_key(&name);
 
     Ok(Value::Undefined)
 }
@@ -610,7 +619,12 @@ pub fn flush<'gc>(
 
     let bytes = flash_lso::write::write_to_bytes(&mut lso).unwrap_or_default();
 
-    Ok(activation.context.storage.put(&name, &bytes).into())
+    Ok(activation
+        .context
+        .player_data
+        .storage
+        .put(&name, &bytes)
+        .into())
 }
 
 pub fn get_size<'gc>(

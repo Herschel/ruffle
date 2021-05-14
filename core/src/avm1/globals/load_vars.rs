@@ -250,7 +250,7 @@ fn send<'gc>(
     }
 
     if let Some(window) = window {
-        activation.context.navigator.navigate_to_url(
+        activation.context.player_data.navigator.navigate_to_url(
             url.to_string(),
             Some(window.to_string()),
             Some((method, form_values)),
@@ -328,12 +328,25 @@ fn spawn_load_var_fetch<'gc>(
         (Cow::Borrowed(url.as_str()), RequestOptions::get())
     };
 
-    let fetch = activation.context.navigator.fetch(&url, request_options);
-    let process = activation.context.load_manager.load_form_into_load_vars(
-        activation.context.player.clone().unwrap(),
-        loader_object,
-        fetch,
-    );
+    let fetch = activation
+        .context
+        .player_data
+        .navigator
+        .fetch(&url, request_options);
+    let process = activation
+        .context
+        .gc_data
+        .load_manager
+        .load_form_into_load_vars(
+            activation
+                .context
+                .player_data
+                .self_reference
+                .clone()
+                .unwrap(),
+            loader_object,
+            fetch,
+        );
 
     // Create hidden properties on object.
     if !loader_object.has_property(activation, "_bytesLoaded") {
@@ -358,7 +371,11 @@ fn spawn_load_var_fetch<'gc>(
         loader_object.set("loaded", false.into(), activation)?;
     }
 
-    activation.context.navigator.spawn_future(process);
+    activation
+        .context
+        .player_data
+        .navigator
+        .spawn_future(process);
 
     Ok(true.into())
 }

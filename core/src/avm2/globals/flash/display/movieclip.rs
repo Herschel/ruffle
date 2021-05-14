@@ -31,7 +31,9 @@ pub fn instance_init<'gc>(
             let constr = proto
                 .get_property(proto, &QName::dynamic_name("constructor"), activation)?
                 .coerce_to_object(activation)?;
-            let movie = Arc::new(SwfMovie::empty(activation.context.swf.version()));
+            let movie = Arc::new(SwfMovie::empty(
+                activation.context.player_data.swf.version(),
+            ));
             let new_do = MovieClip::new_with_avm2(
                 SwfSlice::empty(movie),
                 this,
@@ -164,7 +166,7 @@ fn labels_for_scene<'gc>(
         length: scene_length,
     } = scene;
     let mut frame_labels = Vec::new();
-    let frame_label_proto = activation.context.avm2.prototypes().framelabel;
+    let frame_label_proto = activation.context.gc_data.avm2.prototypes().framelabel;
 
     for (name, frame) in mc.labels_in_range(*scene_start, scene_start + scene_length) {
         let name: Value<'gc> = AvmString::new(activation.context.gc_context, name).into();
@@ -182,7 +184,7 @@ fn labels_for_scene<'gc>(
         *scene_length,
         ArrayObject::from_array(
             ArrayStorage::from_storage(frame_labels),
-            activation.context.avm2.prototypes().array,
+            activation.context.gc_data.avm2.prototypes().array,
             activation.context.gc_context,
         ),
     ))
@@ -225,7 +227,7 @@ pub fn current_scene<'gc>(
             length: mc.total_frames(),
         });
         let (scene_name, scene_length, scene_labels) = labels_for_scene(activation, mc, &scene)?;
-        let scene_proto = activation.context.avm2.prototypes().scene;
+        let scene_proto = activation.context.gc_data.avm2.prototypes().scene;
         let args = [
             AvmString::new(activation.context.gc_context, scene_name).into(),
             scene_labels.into(),
@@ -266,7 +268,7 @@ pub fn scenes<'gc>(
         for scene in mc_scenes {
             let (scene_name, scene_length, scene_labels) =
                 labels_for_scene(activation, mc, &scene)?;
-            let scene_proto = activation.context.avm2.prototypes().scene;
+            let scene_proto = activation.context.gc_data.avm2.prototypes().scene;
             let args = [
                 AvmString::new(activation.context.gc_context, scene_name).into(),
                 scene_labels.into(),
@@ -282,7 +284,7 @@ pub fn scenes<'gc>(
 
         return Ok(ArrayObject::from_array(
             ArrayStorage::from_storage(scene_objects),
-            activation.context.avm2.prototypes().array,
+            activation.context.gc_data.avm2.prototypes().array,
             activation.context.gc_context,
         )
         .into());

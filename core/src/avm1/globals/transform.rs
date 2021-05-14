@@ -196,7 +196,12 @@ fn pixel_bounds<'gc>(
         Value::Number(bounds.width().to_pixels()),
         Value::Number(bounds.height().to_pixels()),
     ];
-    let constructor = activation.context.avm1.prototypes.rectangle_constructor;
+    let constructor = activation
+        .context
+        .gc_data
+        .avm1
+        .prototypes
+        .rectangle_constructor;
     let result = constructor.construct(activation, &args)?;
     Ok(result)
 }

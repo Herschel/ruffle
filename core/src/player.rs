@@ -51,7 +51,7 @@ struct GcRoot<'gc>(GcCell<'gc, GcRootData<'gc>>);
 
 #[derive(Collect)]
 #[collect(no_drop)]
-pub(crate) struct GcRootData<'gc> {
+pub struct GcRootData<'gc> {
     pub library: Library<'gc>,
 
     /// The root of the display object hierarchy.
@@ -97,44 +97,6 @@ pub(crate) struct GcRootData<'gc> {
     pub audio_manager: AudioManager<'gc>,
 }
 
-impl<'gc> GcRootData<'gc> {
-    /// Splits out parameters for creating an `UpdateContext`
-    /// (because we can borrow fields of `self` independently)
-    #[allow(clippy::type_complexity)]
-    fn update_context_params(
-        &mut self,
-    ) -> (
-        Stage<'gc>,
-        &mut Library<'gc>,
-        &mut ActionQueue<'gc>,
-        &mut Avm1<'gc>,
-        &mut Avm2<'gc>,
-        &mut Option<DragObject<'gc>>,
-        &mut LoadManager<'gc>,
-        &mut HashMap<String, Object<'gc>>,
-        &mut Vec<EditText<'gc>>,
-        &mut Timers<'gc>,
-        &mut Option<ContextMenuState<'gc>>,
-        &mut ExternalInterface<'gc>,
-        &mut AudioManager<'gc>,
-    ) {
-        (
-            self.stage,
-            &mut self.library,
-            &mut self.action_queue,
-            &mut self.avm1,
-            &mut self.avm2,
-            &mut self.drag_object,
-            &mut self.load_manager,
-            &mut self.shared_objects,
-            &mut self.unbound_text_fields,
-            &mut self.timers,
-            &mut self.current_context_menu,
-            &mut self.external_interface,
-            &mut self.audio_manager,
-        )
-    }
-}
 type Error = Box<dyn std::error::Error>;
 
 make_arena!(GcArena, GcRoot);
@@ -153,7 +115,7 @@ pub struct Player {
     gc_arena: GcArena,
 }
 
-pub(crate) struct PlayerData {
+pub struct PlayerData {
     /// The version of the player we're emulating.
     ///
     /// This serves a few purposes, primarily for compatibility:
@@ -174,7 +136,7 @@ pub(crate) struct PlayerData {
     pub needs_render: bool,
 
     pub renderer: Renderer,
-    audio: Audio,
+    pub audio: Audio,
     pub navigator: Navigator,
     pub storage: Storage,
     pub locale: Locale,
@@ -221,11 +183,14 @@ pub(crate) struct PlayerData {
     /// This is a weak reference that is upgraded and handed out in various
     /// contexts to other parts of the player. It can be used to ensure the
     /// player lives across `await` calls in async code.
-    pub self_reference: Option<Weak<Mutex<Self>>>,
+    pub self_reference: Option<Weak<Mutex<Player>>>,
 
     /// The current frame of the main timeline, if available.
     /// The first frame is frame 1.
     pub current_frame: Option<u16>,
+
+    pub update_start: Instant,
+    pub times_get_time_called: u32,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -271,7 +236,7 @@ impl Player {
             ))
         });
 
-        let mut data = PlayerData {
+        let data = PlayerData {
             player_version: NEWEST_PLAYER_VERSION,
 
             swf: fake_movie.clone(),
@@ -308,9 +273,11 @@ impl Player {
             storage,
             max_execution_duration: Duration::from_secs(max_execution_duration),
             current_frame: None,
+            update_start: Instant::now(),
+            times_get_time_called: 0,
         };
 
-        let player = Player { data, gc_arena };
+        let mut player = Player { data, gc_arena };
 
         player.mutate_with_update_context(|context| {
             // Instantiate an empty root before the main movie loads.
@@ -322,11 +289,14 @@ impl Player {
                 Instantiator::Movie,
                 false,
             );
-            context.stage.replace_at_depth(context, fake_root.into(), 0);
+            context
+                .gc_data
+                .stage
+                .replace_at_depth(context, fake_root.into(), 0);
 
             let result = Avm2::load_player_globals(context);
 
-            let stage = context.stage;
+            let stage = context.gc_data.stage;
             stage.post_instantiation(context, stage.into(), None, Instantiator::Movie, false);
             stage.build_matrices(context);
 
@@ -354,16 +324,19 @@ impl Player {
         on_metadata: Box<dyn FnOnce(&swf::Header)>,
     ) {
         self.mutate_with_update_context(|context| {
-            let fetch = context.navigator.fetch(movie_url, RequestOptions::get());
-            let process = context.load_manager.load_root_movie(
-                context.player.clone().unwrap(),
+            let fetch = context
+                .player_data
+                .navigator
+                .fetch(movie_url, RequestOptions::get());
+            let process = context.gc_data.load_manager.load_root_movie(
+                context.player_data.self_reference.clone().unwrap(),
                 fetch,
                 movie_url.to_string(),
                 parameters,
                 on_metadata,
             );
 
-            context.navigator.spawn_future(process);
+            context.player_data.navigator.spawn_future(process);
         });
     }
 
@@ -380,29 +353,32 @@ impl Player {
             movie.header().stage_size.y_max
         );
 
-        self.frame_rate = movie.header().frame_rate.into();
-        self.swf = movie;
-        self.instance_counter = 0;
+        self.data.frame_rate = movie.header().frame_rate.into();
+        self.data.audio.set_frame_rate(self.data.frame_rate);
+        self.data.swf = movie;
+        self.data.instance_counter = 0;
 
         self.mutate_with_update_context(|context| {
-            context.stage.set_movie_size(
+            context.gc_data.stage.set_movie_size(
                 context.gc_context,
-                context.swf.width(),
-                context.swf.height(),
+                context.player_data.swf.width(),
+                context.player_data.swf.height(),
             );
-            let domain = Avm2Domain::movie_domain(context.gc_context, context.avm2.global_domain());
+            let domain =
+                Avm2Domain::movie_domain(context.gc_context, context.gc_data.avm2.global_domain());
             context
+                .gc_data
                 .library
-                .library_for_movie_mut(context.swf.clone())
+                .library_for_movie_mut(context.player_data.swf.clone())
                 .set_avm2_domain(domain);
 
             let root: DisplayObject =
-                MovieClip::from_movie(context.gc_context, context.swf.clone()).into();
+                MovieClip::from_movie(context.gc_context, context.player_data.swf.clone()).into();
 
             root.set_depth(context.gc_context, 0);
-            let flashvars = if !context.swf.parameters().is_empty() {
+            let flashvars = if !context.player_data.swf.parameters().is_empty() {
                 let object = ScriptObject::object(context.gc_context, None);
-                for (key, value) in context.swf.parameters().iter() {
+                for (key, value) in context.player_data.swf.parameters().iter() {
                     object.define_value(
                         context.gc_context,
                         key,
@@ -417,16 +393,19 @@ impl Player {
 
             root.post_instantiation(context, root, flashvars, Instantiator::Movie, false);
             root.set_default_root_name(context);
-            context.stage.replace_at_depth(context, root, 0);
+            context.gc_data.stage.replace_at_depth(context, root, 0);
 
             // Load and parse the device font.
-            if context.library.device_font().is_none() {
-                let device_font =
-                    Self::load_device_font(context.gc_context, DEVICE_FONT_TAG, context.renderer);
+            if context.gc_data.library.device_font().is_none() {
+                let device_font = Self::load_device_font(
+                    context.gc_context,
+                    DEVICE_FONT_TAG,
+                    &mut *context.player_data.renderer,
+                );
                 if let Err(e) = &device_font {
                     log::error!("Unable to load device font: {}", e);
                 }
-                context.library.set_device_font(device_font.ok());
+                context.gc_data.library.set_device_font(device_font.ok());
             }
 
             // Set the version parameter on the root.
@@ -437,8 +416,9 @@ impl Player {
             let object = root.object().coerce_to_object(&mut activation);
             let version_string = activation
                 .context
+                .player_data
                 .system
-                .get_version_string(activation.context.avm1);
+                .get_version_string(&mut activation.context.gc_data.avm1);
             object.define_value(
                 activation.context.gc_context,
                 "$version",
@@ -446,12 +426,11 @@ impl Player {
                 Attribute::empty(),
             );
 
-            let stage = activation.context.stage;
+            let stage = activation.context.gc_data.stage;
             stage.build_matrices(&mut activation.context);
         });
 
         self.preload();
-        self.audio.set_frame_rate(self.frame_rate);
     }
 
     /// Get rough estimate of the max # of times we can update the frame.
@@ -470,12 +449,12 @@ impl Player {
     fn max_frames_per_tick(&self) -> u32 {
         const MAX_FRAMES_PER_TICK: u32 = 5;
 
-        if self.recent_run_frame_timings.is_empty() {
+        if self.data.recent_run_frame_timings.is_empty() {
             5
         } else {
-            let frame_time = 1000.0 / self.frame_rate;
-            let average_run_frame_time = self.recent_run_frame_timings.iter().sum::<f64>()
-                / self.recent_run_frame_timings.len() as f64;
+            let frame_time = 1000.0 / self.data.frame_rate;
+            let average_run_frame_time = self.data.recent_run_frame_timings.iter().sum::<f64>()
+                / self.data.recent_run_frame_timings.len() as f64;
             ((frame_time / average_run_frame_time) as u32)
                 .max(1)
                 .min(MAX_FRAMES_PER_TICK)
@@ -483,41 +462,41 @@ impl Player {
     }
 
     fn add_frame_timing(&mut self, elapsed: f64) {
-        self.recent_run_frame_timings.push_back(elapsed);
-        if self.recent_run_frame_timings.len() >= 10 {
-            self.recent_run_frame_timings.pop_front();
+        self.data.recent_run_frame_timings.push_back(elapsed);
+        if self.data.recent_run_frame_timings.len() >= 10 {
+            self.data.recent_run_frame_timings.pop_front();
         }
     }
 
     pub fn tick(&mut self, dt: f64) {
         // Don't run until preloading is complete.
         // TODO: Eventually we want to stream content similar to the Flash player.
-        if !self.audio.is_loading_complete() {
+        if !self.data.audio.is_loading_complete() {
             return;
         }
 
         if self.is_playing() {
-            self.frame_accumulator += dt;
-            let frame_time = 1000.0 / self.frame_rate;
+            self.data.frame_accumulator += dt;
+            let frame_time = 1000.0 / self.data.frame_rate;
 
             let max_frames_per_tick = self.max_frames_per_tick();
             let mut frame = 0;
 
-            while frame < max_frames_per_tick && self.frame_accumulator >= frame_time {
+            while frame < max_frames_per_tick && self.data.frame_accumulator >= frame_time {
                 let timer = Instant::now();
                 self.run_frame();
                 let elapsed = timer.elapsed().as_millis() as f64;
 
                 self.add_frame_timing(elapsed);
 
-                self.frame_accumulator -= frame_time;
+                self.data.frame_accumulator -= frame_time;
                 frame += 1;
                 // The script probably tried implementing an FPS limiter with a busy loop.
                 // We fooled the busy loop by pretending that more time has passed that actually did.
                 // Then we need to actually pass this time, by decreasing frame_accumulator
                 // to delay the future frame.
-                if self.time_offset > 0 {
-                    self.frame_accumulator -= self.time_offset as f64;
+                if self.data.time_offset > 0 {
+                    self.data.frame_accumulator -= self.data.time_offset as f64;
                 }
             }
 
@@ -528,32 +507,32 @@ impl Player {
             // Also note that in Flash, a blocking busy loop would delay setTimeout
             // and cancel some setInterval callbacks, but here busy loops don't block
             // so timer callbacks won't get cancelled/delayed.
-            self.time_offset = 0;
+            self.data.time_offset = 0;
 
             // Sanity: If we had too many frames to tick, just reset the accumulator
             // to prevent running at turbo speed.
-            if self.frame_accumulator >= frame_time {
-                self.frame_accumulator = 0.0;
+            if self.data.frame_accumulator >= frame_time {
+                self.data.frame_accumulator = 0.0;
             }
 
             self.update_timers(dt);
-            self.audio.tick();
+            self.data.audio.tick();
         }
     }
 
     /// Returns the approximate duration of time until the next frame is due to run.
     /// This is only an approximation to be used for sleep durations.
     pub fn time_til_next_frame(&self) -> std::time::Duration {
-        let frame_time = 1000.0 / self.frame_rate;
-        let mut dt = if self.frame_accumulator <= 0.0 {
+        let frame_time = 1000.0 / self.data.frame_rate;
+        let mut dt = if self.data.frame_accumulator <= 0.0 {
             frame_time
-        } else if self.frame_accumulator >= frame_time {
+        } else if self.data.frame_accumulator >= frame_time {
             0.0
         } else {
-            frame_time - self.frame_accumulator
+            frame_time - self.data.frame_accumulator
         };
 
-        if let Some(time_til_next_timer) = self.time_til_next_timer {
+        if let Some(time_til_next_timer) = self.data.time_til_next_timer {
             dt = dt.min(time_til_next_timer)
         }
 
@@ -563,12 +542,12 @@ impl Player {
     }
 
     pub fn is_playing(&self) -> bool {
-        self.is_playing
+        self.data.is_playing
     }
 
     pub fn prepare_context_menu(&mut self) -> Vec<ContextMenuItem> {
         self.mutate_with_update_context(|context| {
-            if !context.stage.show_menu() {
+            if !context.gc_data.stage.show_menu() {
                 return vec![];
             }
 
@@ -579,7 +558,7 @@ impl Player {
 
             // TODO: this should use a pointed display object with `.menu`
             let menu_object = {
-                let dobj = activation.context.stage.root_clip();
+                let dobj = activation.context.gc_data.stage.root_clip();
                 if let Value::Object(obj) = dobj.object() {
                     if let Ok(Value::Object(menu)) = obj.get("menu", &mut activation) {
                         Some(menu)
@@ -596,7 +575,7 @@ impl Player {
                 &mut activation,
             );
             let ret = menu.info().clone();
-            *activation.context.current_context_menu = Some(menu);
+            activation.context.gc_data.current_context_menu = Some(menu);
             ret
         })
     }
@@ -610,7 +589,7 @@ impl Player {
 
     pub fn run_context_menu_callback(&mut self, index: usize) {
         self.mutate_with_update_context(|context| {
-            let menu = &context.current_context_menu;
+            let menu = &context.gc_data.current_context_menu;
             if let Some(ref menu) = menu {
                 match menu.callback(index) {
                     ContextMenuCallback::Avm1 { item, callback } => {
@@ -632,9 +611,9 @@ impl Player {
         callback: Object<'gc>,
         context: &mut UpdateContext<'_, 'gc, '_>,
     ) {
-        let version = context.swf.header().version;
-        let globals = context.avm1.global_object_cell();
-        let root_clip = context.stage.root_clip();
+        let version = context.player_data.swf.header().version;
+        let globals = context.gc_data.avm1.global_object_cell();
+        let root_clip = context.gc_data.stage.root_clip();
 
         let mut activation = Activation::from_nothing(
             context.reborrow(),
@@ -662,7 +641,7 @@ impl Player {
     }
 
     fn toggle_play_root_movie<'gc>(context: &mut UpdateContext<'_, 'gc, '_>) {
-        if let Some(mc) = context.stage.root_clip().as_movie_clip() {
+        if let Some(mc) = context.gc_data.stage.root_clip().as_movie_clip() {
             if mc.playing() {
                 mc.stop(context);
             } else {
@@ -671,17 +650,17 @@ impl Player {
         }
     }
     fn rewind_root_movie<'gc>(context: &mut UpdateContext<'_, 'gc, '_>) {
-        if let Some(mc) = context.stage.root_clip().as_movie_clip() {
+        if let Some(mc) = context.gc_data.stage.root_clip().as_movie_clip() {
             mc.goto_frame(context, 1, true)
         }
     }
     fn forward_root_movie<'gc>(context: &mut UpdateContext<'_, 'gc, '_>) {
-        if let Some(mc) = context.stage.root_clip().as_movie_clip() {
+        if let Some(mc) = context.gc_data.stage.root_clip().as_movie_clip() {
             mc.next_frame(context);
         }
     }
     fn back_root_movie<'gc>(context: &mut UpdateContext<'_, 'gc, '_>) {
-        if let Some(mc) = context.stage.root_clip().as_movie_clip() {
+        if let Some(mc) = context.gc_data.stage.root_clip().as_movie_clip() {
             mc.prev_frame(context);
         }
     }
@@ -689,80 +668,86 @@ impl Player {
     pub fn set_is_playing(&mut self, v: bool) {
         if v {
             // Allow auto-play after user gesture for web backends.
-            self.audio.play();
+            self.data.audio.play();
         } else {
-            self.audio.pause();
+            self.data.audio.pause();
         }
-        self.is_playing = v;
+        self.data.is_playing = v;
     }
 
     pub fn needs_render(&self) -> bool {
-        self.needs_render
+        self.data.needs_render
     }
 
     pub fn background_color(&mut self) -> Option<Color> {
-        self.mutate_with_update_context(|context| context.stage.background_color())
+        self.mutate_with_update_context(|context| context.gc_data.stage.background_color())
     }
 
     pub fn set_background_color(&mut self, color: Option<Color>) {
         self.mutate_with_update_context(|context| {
             context
+                .gc_data
                 .stage
                 .set_background_color(context.gc_context, color)
         })
     }
 
     pub fn letterbox(&mut self) -> Letterbox {
-        self.mutate_with_update_context(|context| context.stage.letterbox())
+        self.mutate_with_update_context(|context| context.gc_data.stage.letterbox())
     }
 
     pub fn set_letterbox(&mut self, letterbox: Letterbox) {
         self.mutate_with_update_context(|context| {
-            context.stage.set_letterbox(context.gc_context, letterbox)
+            context
+                .gc_data
+                .stage
+                .set_letterbox(context.gc_context, letterbox)
         })
     }
 
     pub fn warn_on_unsupported_content(&self) -> bool {
-        self.warn_on_unsupported_content
+        self.data.warn_on_unsupported_content
     }
 
     pub fn set_warn_on_unsupported_content(&mut self, warn_on_unsupported_content: bool) {
-        self.warn_on_unsupported_content = warn_on_unsupported_content
+        self.data.warn_on_unsupported_content = warn_on_unsupported_content
     }
 
     pub fn movie_width(&mut self) -> u32 {
-        self.mutate_with_update_context(|context| context.stage.movie_size().0)
+        self.mutate_with_update_context(|context| context.gc_data.stage.movie_size().0)
     }
 
     pub fn movie_height(&mut self) -> u32 {
-        self.mutate_with_update_context(|context| context.stage.movie_size().1)
+        self.mutate_with_update_context(|context| context.gc_data.stage.movie_size().1)
     }
 
     pub fn viewport_dimensions(&mut self) -> (u32, u32) {
-        self.mutate_with_update_context(|context| context.stage.viewport_size())
+        self.mutate_with_update_context(|context| context.gc_data.stage.viewport_size())
     }
 
     pub fn set_viewport_dimensions(&mut self, width: u32, height: u32, scale_factor: f64) {
         self.mutate_with_update_context(|context| {
-            let stage = context.stage;
+            let stage = context.gc_data.stage;
             stage.set_viewport_size(context, width, height, scale_factor);
         })
     }
 
     pub fn handle_event(&mut self, event: PlayerEvent) {
-        let mut needs_render = self.needs_render;
+        let mut needs_render = self.data.needs_render;
         let inverse_view_matrix =
-            self.mutate_with_update_context(|context| context.stage.inverse_view_matrix());
+            self.mutate_with_update_context(|context| context.gc_data.stage.inverse_view_matrix());
 
         if cfg!(feature = "avm_debug") {
             if let PlayerEvent::KeyDown {
                 key_code: KeyCode::V,
             } = event
             {
-                if self.ui.is_key_down(KeyCode::Control) && self.ui.is_key_down(KeyCode::Alt) {
+                if self.data.ui.is_key_down(KeyCode::Control)
+                    && self.data.ui.is_key_down(KeyCode::Alt)
+                {
                     self.mutate_with_update_context(|context| {
                         let mut dumper = VariableDumper::new("  ");
-                        let levels: Vec<_> = context.stage.iter_depth_list().collect();
+                        let levels: Vec<_> = context.gc_data.stage.iter_depth_list().collect();
 
                         let mut activation = Activation::from_stub(
                             context.reborrow(),
@@ -772,7 +757,7 @@ impl Player {
                         dumper.print_variables(
                             "Global Variables:",
                             "_global",
-                            &activation.context.avm1.global_object_cell(),
+                            &activation.context.gc_data.avm1.global_object_cell(),
                             &mut activation,
                         );
 
@@ -794,20 +779,22 @@ impl Player {
                 key_code: KeyCode::D,
             } = event
             {
-                if self.ui.is_key_down(KeyCode::Control) && self.ui.is_key_down(KeyCode::Alt) {
+                if self.data.ui.is_key_down(KeyCode::Control)
+                    && self.data.ui.is_key_down(KeyCode::Alt)
+                {
                     self.mutate_with_update_context(|context| {
-                        if context.avm1.show_debug_output() {
+                        if context.gc_data.avm1.show_debug_output() {
                             log::info!(
                                 "AVM Debugging turned off! Press CTRL+ALT+D to turn off again."
                             );
-                            context.avm1.set_show_debug_output(false);
-                            context.avm2.set_show_debug_output(false);
+                            context.gc_data.avm1.set_show_debug_output(false);
+                            context.gc_data.avm2.set_show_debug_output(false);
                         } else {
                             log::info!(
                                 "AVM Debugging turned on! Press CTRL+ALT+D to turn on again."
                             );
-                            context.avm1.set_show_debug_output(true);
-                            context.avm2.set_show_debug_output(true);
+                            context.gc_data.avm1.set_show_debug_output(true);
+                            context.gc_data.avm2.set_show_debug_output(true);
                         }
                     });
                 }
@@ -819,7 +806,8 @@ impl Player {
         | PlayerEvent::MouseDown { x, y }
         | PlayerEvent::MouseUp { x, y } = event
         {
-            self.mouse_pos = inverse_view_matrix * (Twips::from_pixels(x), Twips::from_pixels(y));
+            self.data.mouse_pos =
+                inverse_view_matrix * (Twips::from_pixels(x), Twips::from_pixels(y));
             if self.update_roll_over() {
                 needs_render = true;
             }
@@ -849,7 +837,7 @@ impl Player {
 
         if button_event.is_some() {
             self.mutate_with_update_context(|context| {
-                let levels: Vec<_> = context.stage.iter_depth_list().collect();
+                let levels: Vec<_> = context.gc_data.stage.iter_depth_list().collect();
                 for (_depth, level) in levels {
                     if let Some(button_event) = button_event {
                         let state = level.handle_clip_event(context, button_event);
@@ -863,7 +851,12 @@ impl Player {
 
         if let PlayerEvent::TextInput { codepoint } = event {
             self.mutate_with_update_context(|context| {
-                if let Some(text) = context.focus_tracker.get().and_then(|o| o.as_edit_text()) {
+                if let Some(text) = context
+                    .gc_data
+                    .focus_tracker
+                    .get()
+                    .and_then(|o| o.as_edit_text())
+                {
                     text.text_input(codepoint, context);
                 }
             });
@@ -899,7 +892,7 @@ impl Player {
 
             // Fire clip event on all clips.
             if let Some(clip_event) = clip_event {
-                let levels: Vec<_> = context.stage.iter_depth_list().collect();
+                let levels: Vec<_> = context.gc_data.stage.iter_depth_list().collect();
                 for (_depth, level) in levels {
                     level.handle_clip_event(context, clip_event);
                 }
@@ -907,8 +900,8 @@ impl Player {
 
             // Fire event listener on appropriate object
             if let Some((listener_type, event_name, args)) = listener {
-                context.action_queue.queue_actions(
-                    context.stage.root_clip(),
+                context.gc_data.action_queue.queue_actions(
+                    context.gc_data.stage.root_clip(),
                     ActionType::NotifyListeners {
                         listener: listener_type,
                         method: event_name,
@@ -919,11 +912,11 @@ impl Player {
             }
         });
 
-        let mut is_mouse_down = self.is_mouse_down;
+        let mut is_mouse_down = self.data.is_mouse_down;
         self.mutate_with_update_context(|context| {
-            if let Some(node) = context.mouse_hovered_object {
+            if let Some(node) = context.gc_data.mouse_hovered_object {
                 if node.removed() {
-                    context.mouse_hovered_object = None;
+                    context.gc_data.mouse_hovered_object = None;
                 }
             }
 
@@ -931,7 +924,7 @@ impl Player {
                 PlayerEvent::MouseDown { .. } => {
                     is_mouse_down = true;
                     needs_render = true;
-                    if let Some(node) = context.mouse_hovered_object {
+                    if let Some(node) = context.gc_data.mouse_hovered_object {
                         node.handle_clip_event(context, ClipEvent::Press);
                     }
                 }
@@ -939,7 +932,7 @@ impl Player {
                 PlayerEvent::MouseUp { .. } => {
                     is_mouse_down = false;
                     needs_render = true;
-                    if let Some(node) = context.mouse_hovered_object {
+                    if let Some(node) = context.gc_data.mouse_hovered_object {
                         node.handle_clip_event(context, ClipEvent::Release);
                     }
                 }
@@ -949,20 +942,20 @@ impl Player {
 
             Self::run_actions(context);
         });
-        self.is_mouse_down = is_mouse_down;
+        self.data.is_mouse_down = is_mouse_down;
         if needs_render {
-            self.needs_render = true;
+            self.data.needs_render = true;
         }
     }
 
     /// Update dragged object, if any.
     fn update_drag(&mut self) {
-        let mouse_pos = self.mouse_pos;
+        let mouse_pos = self.data.mouse_pos;
         self.mutate_with_update_context(|context| {
-            if let Some(drag_object) = &mut context.drag_object {
+            if let Some(drag_object) = &mut context.gc_data.drag_object {
                 if drag_object.display_object.removed() {
                     // Be sure to clear the drag if the object was removed.
-                    *context.drag_object = None;
+                    context.gc_data.drag_object = None;
                 } else {
                     let mut drag_point = (
                         mouse_pos.0 + drag_object.offset.0,
@@ -987,16 +980,16 @@ impl Player {
     /// node to change.
     fn update_roll_over(&mut self) -> bool {
         // TODO: While the mouse is down, maintain the hovered node.
-        if self.is_mouse_down {
+        if self.data.is_mouse_down {
             return false;
         }
-        let mouse_pos = self.mouse_pos;
+        let mouse_pos = self.data.mouse_pos;
 
-        let mut new_cursor = self.mouse_cursor;
+        let mut new_cursor = self.data.mouse_cursor;
         let hover_changed = self.mutate_with_update_context(|context| {
             // Check hovered object.
             let mut new_hovered = None;
-            let levels: Vec<_> = context.stage.iter_depth_list().collect();
+            let levels: Vec<_> = context.gc_data.stage.iter_depth_list().collect();
             for (_depth, level) in levels.iter().rev() {
                 if new_hovered.is_none() {
                     new_hovered = level.mouse_pick(context, *level, mouse_pos);
@@ -1005,7 +998,7 @@ impl Player {
                 }
             }
 
-            let cur_hovered = context.mouse_hovered_object;
+            let cur_hovered = context.gc_data.mouse_hovered_object;
 
             if cur_hovered.map(|d| d.as_ptr()) != new_hovered.map(|d| d.as_ptr()) {
                 // RollOut of previous node.
@@ -1022,7 +1015,7 @@ impl Player {
                     node.handle_clip_event(context, ClipEvent::RollOver);
                 }
 
-                context.mouse_hovered_object = new_hovered;
+                context.gc_data.mouse_hovered_object = new_hovered;
 
                 Self::run_actions(context);
                 true
@@ -1032,9 +1025,9 @@ impl Player {
         });
 
         // Update mouse cursor if it has changed.
-        if new_cursor != self.mouse_cursor {
-            self.mouse_cursor = new_cursor;
-            self.ui.set_mouse_cursor(new_cursor)
+        if new_cursor != self.data.mouse_cursor {
+            self.data.mouse_cursor = new_cursor;
+            self.data.ui.set_mouse_cursor(new_cursor)
         }
 
         hover_changed
@@ -1048,12 +1041,13 @@ impl Player {
         let mut is_action_script_3 = false;
         self.mutate_with_update_context(|context| {
             let mut morph_shapes = fnv::FnvHashMap::default();
-            let root = context.stage.root_clip();
+            let root = context.gc_data.stage.root_clip();
             root.as_movie_clip()
                 .unwrap()
                 .preload(context, &mut morph_shapes);
 
             let lib = context
+                .gc_data
                 .library
                 .library_for_movie_mut(root.as_movie_clip().unwrap().movie().unwrap());
 
@@ -1064,15 +1058,15 @@ impl Player {
                 lib.register_character(id, crate::character::Character::MorphShape(morph_shape));
             }
         });
-        if is_action_script_3 && self.warn_on_unsupported_content {
-            self.ui.display_unsupported_message();
+        if is_action_script_3 && self.data.warn_on_unsupported_content {
+            self.data.ui.display_unsupported_message();
         }
     }
 
     pub fn run_frame(&mut self) {
         self.update(|update_context| {
             // TODO: In what order are levels run?
-            let stage = update_context.stage;
+            let stage = update_context.gc_data.stage;
 
             stage.exit_frame(update_context);
             stage.enter_frame(update_context);
@@ -1083,12 +1077,15 @@ impl Player {
 
             update_context.update_sounds();
         });
-        self.needs_render = true;
+        self.data.needs_render = true;
     }
 
     pub fn render(&mut self) {
-        let (renderer, ui, transform_stack) =
-            (&mut self.renderer, &mut self.ui, &mut self.transform_stack);
+        let (renderer, ui, transform_stack) = (
+            &mut self.data.renderer,
+            &mut self.data.ui,
+            &mut self.data.transform_stack,
+        );
 
         self.gc_arena.mutate(|_gc_context, gc_root| {
             let root_data = gc_root.0.read();
@@ -1105,63 +1102,63 @@ impl Player {
             root_data.stage.render(&mut render_context);
         });
 
-        self.needs_render = false;
+        self.data.needs_render = false;
     }
 
     /// The current frame of the main timeline, if available.
     /// The first frame is frame 1.
     pub fn current_frame(&self) -> Option<u16> {
-        self.current_frame
+        self.data.current_frame
     }
 
     pub fn audio(&self) -> &Audio {
-        &self.audio
+        &self.data.audio
     }
 
     pub fn audio_mut(&mut self) -> &mut Audio {
-        &mut self.audio
+        &mut self.data.audio
     }
 
     // The frame rate of the current movie in FPS.
     pub fn frame_rate(&self) -> f64 {
-        self.frame_rate
+        self.data.frame_rate
     }
 
     pub fn renderer(&self) -> &Renderer {
-        &self.renderer
+        &self.data.renderer
     }
 
     pub fn renderer_mut(&mut self) -> &mut Renderer {
-        &mut self.renderer
+        &mut self.data.renderer
     }
 
     pub fn storage(&self) -> &Storage {
-        &self.storage
+        &self.data.storage
     }
 
     pub fn storage_mut(&mut self) -> &mut Storage {
-        &mut self.storage
+        &mut self.data.storage
     }
 
     pub fn destroy(self) -> Renderer {
-        self.renderer
+        self.data.renderer
     }
 
     pub fn ui(&self) -> &Ui {
-        &self.ui
+        &self.data.ui
     }
 
     pub fn ui_mut(&mut self) -> &mut Ui {
-        &mut self.ui
+        &mut self.data.ui
     }
 
     pub fn locale(&self) -> &Locale {
-        &self.locale
+        &self.data.locale
     }
 
     pub fn run_actions<'gc>(context: &mut UpdateContext<'_, 'gc, '_>) {
         // Note that actions can queue further actions, so a while loop is necessary here.
-        while let Some(actions) = context.action_queue.pop_action() {
+        while let Some(actions) = context.gc_data.action_queue.pop_action() {
             // We don't run frame actions if the clip was removed after it queued the action.
             if !actions.is_unload && actions.clip.removed() {
                 continue;
@@ -1173,7 +1170,7 @@ impl Player {
                     Avm1::run_stack_frame_for_action(
                         actions.clip,
                         "[Frame]",
-                        context.swf.header().version,
+                        context.player_data.swf.header().version,
                         bytecode,
                         context,
                     );
@@ -1183,8 +1180,8 @@ impl Player {
                     constructor: Some(constructor),
                     events,
                 } => {
-                    let version = context.swf.version();
-                    let globals = context.avm1.global_object_cell();
+                    let version = context.player_data.swf.version();
+                    let globals = context.gc_data.avm1.global_object_cell();
 
                     let mut activation = Activation::from_nothing(
                         context.reborrow(),
@@ -1200,7 +1197,7 @@ impl Player {
                                 let _ = activation.run_child_frame_for_action(
                                     "[Actions]",
                                     actions.clip,
-                                    activation.context.swf.header().version,
+                                    activation.context.player_data.swf.header().version,
                                     event,
                                 );
                             }
@@ -1218,7 +1215,7 @@ impl Player {
                         Avm1::run_stack_frame_for_action(
                             actions.clip,
                             "[Construct]",
-                            context.swf.header().version,
+                            context.player_data.swf.header().version,
                             event,
                             context,
                         );
@@ -1229,7 +1226,7 @@ impl Player {
                     Avm1::run_stack_frame_for_method(
                         actions.clip,
                         object,
-                        context.swf.header().version,
+                        context.player_data.swf.header().version,
                         context,
                         name,
                         &args,
@@ -1246,7 +1243,7 @@ impl Player {
                     // so this doesn't require any further execution.
                     Avm1::notify_system_listeners(
                         actions.clip,
-                        context.swf.version(),
+                        context.player_data.swf.version(),
                         context,
                         listener,
                         method,
@@ -1276,6 +1273,9 @@ impl Player {
         F: for<'a, 'gc> FnOnce(&mut UpdateContext<'a, 'gc, '_>) -> R,
     {
         let player_data = &mut self.data;
+        player_data.update_start = Instant::now();
+        player_data.times_get_time_called = 0;
+
         self.gc_arena.mutate(|gc_context, gc_root| {
             let mut root_data = gc_root.0.write(gc_context);
 
@@ -1286,6 +1286,17 @@ impl Player {
             };
 
             let ret = f(&mut update_context);
+
+            update_context.player_data.current_frame = update_context
+                .gc_data
+                .stage
+                .root_clip()
+                .as_movie_clip()
+                .map(|clip| clip.current_frame());
+            update_context
+                .player_data
+                .audio
+                .set_frame_rate(update_context.player_data.frame_rate);
 
             ret
         })
@@ -1344,7 +1355,7 @@ impl Player {
         self.update(|context| {
             let mut activation =
                 Activation::from_stub(context.reborrow(), ActivationIdentifier::root("[Flush]"));
-            let shared_objects = activation.context.shared_objects.clone();
+            let shared_objects = activation.context.gc_data.shared_objects.clone();
             for so in shared_objects.values() {
                 let _ = crate::avm1::globals::shared_object::flush(&mut activation, *so, &[]);
             }
@@ -1354,19 +1365,19 @@ impl Player {
     /// Update all AVM-based timers (such as created via setInterval).
     /// Returns the approximate amount of time until the next timer tick.
     pub fn update_timers(&mut self, dt: f64) {
-        self.time_til_next_timer =
+        self.data.time_til_next_timer =
             self.mutate_with_update_context(|context| Timers::update_timers(context, dt));
     }
 
     /// Returns whether this player consumes mouse wheel events.
     /// Used by web to prevent scrolling.
     pub fn should_prevent_scrolling(&mut self) -> bool {
-        self.mutate_with_update_context(|context| context.avm1.has_mouse_listener())
+        self.mutate_with_update_context(|context| context.gc_data.avm1.has_mouse_listener())
     }
 
     pub fn add_external_interface(&mut self, provider: Box<dyn ExternalInterfaceProvider>) {
         self.mutate_with_update_context(|context| {
-            context.external_interface.add_provider(provider)
+            context.gc_data.external_interface.add_provider(provider)
         });
     }
 
@@ -1376,7 +1387,7 @@ impl Player {
         args: impl IntoIterator<Item = ExternalValue>,
     ) -> ExternalValue {
         self.mutate_with_update_context(|context| {
-            if let Some(callback) = context.external_interface.get_callback(name) {
+            if let Some(callback) = context.gc_data.external_interface.get_callback(name) {
                 callback.call(context, name, args)
             } else {
                 ExternalValue::Null
@@ -1385,15 +1396,15 @@ impl Player {
     }
 
     pub fn log_backend(&self) -> &Log {
-        &self.log
+        &self.data.log
     }
 
     pub fn max_execution_duration(&self) -> Duration {
-        self.max_execution_duration
+        self.data.max_execution_duration
     }
 
     pub fn set_max_execution_duration(&mut self, max_execution_duration: Duration) {
-        self.max_execution_duration = max_execution_duration
+        self.data.max_execution_duration = max_execution_duration
     }
 }
 

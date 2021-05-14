@@ -14,7 +14,12 @@ macro_rules! capabilities_func {
             _this: Object<'gc>,
             _args: &[Value<'gc>],
         ) -> Result<Value<'gc>, Error<'gc>> {
-            Ok(activation.context.system.has_capability($capability).into())
+            Ok(activation
+                .context
+                .player_data
+                .system
+                .has_capability($capability)
+                .into())
         }
     };
 }
@@ -26,7 +31,12 @@ macro_rules! inverse_capabilities_func {
             _this: Object<'gc>,
             _args: &[Value<'gc>],
         ) -> Result<Value<'gc>, Error<'gc>> {
-            Ok((!activation.context.system.has_capability($capability)).into())
+            Ok((!activation
+                .context
+                .player_data
+                .system
+                .has_capability($capability))
+            .into())
         }
     };
 }
@@ -83,7 +93,12 @@ pub fn get_player_type<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     Ok(AvmString::new(
         activation.context.gc_context,
-        activation.context.system.player_type.to_string(),
+        activation
+            .context
+            .player_data
+            .system
+            .player_type
+            .to_string(),
     )
     .into())
 }
@@ -95,7 +110,12 @@ pub fn get_screen_color<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     Ok(AvmString::new(
         activation.context.gc_context,
-        activation.context.system.screen_color.to_string(),
+        activation
+            .context
+            .player_data
+            .system
+            .screen_color
+            .to_string(),
     )
     .into())
 }
@@ -109,9 +129,10 @@ pub fn get_language<'gc>(
         activation.context.gc_context,
         activation
             .context
+            .player_data
             .system
             .language
-            .get_language_code(activation.context.avm1.player_version)
+            .get_language_code(activation.context.gc_data.avm1.player_version)
             .to_string(),
     )
     .into())
@@ -122,7 +143,13 @@ pub fn get_screen_resolution_x<'gc>(
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    Ok(activation.context.system.screen_resolution.0.into())
+    Ok(activation
+        .context
+        .player_data
+        .system
+        .screen_resolution
+        .0
+        .into())
 }
 
 pub fn get_screen_resolution_y<'gc>(
@@ -130,7 +157,13 @@ pub fn get_screen_resolution_y<'gc>(
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    Ok(activation.context.system.screen_resolution.1.into())
+    Ok(activation
+        .context
+        .player_data
+        .system
+        .screen_resolution
+        .1
+        .into())
 }
 
 pub fn get_pixel_aspect_ratio<'gc>(
@@ -138,7 +171,7 @@ pub fn get_pixel_aspect_ratio<'gc>(
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    Ok(activation.context.system.aspect_ratio.into())
+    Ok(activation.context.player_data.system.aspect_ratio.into())
 }
 
 pub fn get_screen_dpi<'gc>(
@@ -146,7 +179,7 @@ pub fn get_screen_dpi<'gc>(
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    Ok(activation.context.system.dpi.into())
+    Ok(activation.context.player_data.system.dpi.into())
 }
 
 pub fn get_manufacturer<'gc>(
@@ -158,9 +191,10 @@ pub fn get_manufacturer<'gc>(
         activation.context.gc_context,
         activation
             .context
+            .player_data
             .system
             .manufacturer
-            .get_manufacturer_string(activation.context.avm1.player_version),
+            .get_manufacturer_string(activation.context.gc_data.avm1.player_version),
     )
     .into())
 }
@@ -172,7 +206,7 @@ pub fn get_os_name<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     Ok(AvmString::new(
         activation.context.gc_context,
-        activation.context.system.os.to_string(),
+        activation.context.player_data.system.os.to_string(),
     )
     .into())
 }
@@ -186,8 +220,9 @@ pub fn get_version<'gc>(
         activation.context.gc_context,
         activation
             .context
+            .player_data
             .system
-            .get_version_string(activation.context.avm1),
+            .get_version_string(&mut activation.context.gc_data.avm1),
     )
     .into())
 }
@@ -199,8 +234,9 @@ pub fn get_server_string<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     let server_string = activation
         .context
+        .player_data
         .system
-        .get_server_string(activation.context.avm1);
+        .get_server_string(&mut activation.context.gc_data.avm1);
     Ok(AvmString::new(activation.context.gc_context, server_string).into())
 }
 
@@ -211,7 +247,12 @@ pub fn get_cpu_architecture<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     Ok(AvmString::new(
         activation.context.gc_context,
-        activation.context.system.cpu_architecture.to_string(),
+        activation
+            .context
+            .player_data
+            .system
+            .cpu_architecture
+            .to_string(),
     )
     .into())
 }
@@ -223,7 +264,7 @@ pub fn get_max_idc_level<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     Ok(AvmString::new(
         activation.context.gc_context,
-        activation.context.system.idc_level.clone(),
+        activation.context.player_data.system.idc_level.clone(),
     )
     .into())
 }

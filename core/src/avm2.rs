@@ -103,7 +103,7 @@ impl<'gc> Avm2<'gc> {
     }
 
     pub fn load_player_globals(context: &mut UpdateContext<'_, 'gc, '_>) -> Result<(), Error> {
-        let globals = context.avm2.globals;
+        let globals = context.gc_data.avm2.globals;
         let mut activation = Activation::from_nothing(context.reborrow());
         globals::load_player_globals(&mut activation, globals)
     }
@@ -144,7 +144,13 @@ impl<'gc> Avm2<'gc> {
         target: Object<'gc>,
     ) -> Result<bool, Error> {
         use crate::avm2::events::dispatch_event;
-        let event_proto = context.avm2.system_prototypes.as_ref().unwrap().event;
+        let event_proto = context
+            .gc_data
+            .avm2
+            .system_prototypes
+            .as_ref()
+            .unwrap()
+            .event;
         let event_object = EventObject::from_event(context.gc_context, Some(event_proto), event);
         let mut activation = Activation::from_nothing(context.reborrow());
 
@@ -169,7 +175,12 @@ impl<'gc> Avm2<'gc> {
             return;
         }
 
-        let bucket = context.avm2.broadcast_list.entry(event_name).or_default();
+        let bucket = context
+            .gc_data
+            .avm2
+            .broadcast_list
+            .entry(event_name)
+            .or_default();
 
         if bucket.iter().any(|x| Object::ptr_eq(*x, object)) {
             return;
@@ -197,6 +208,7 @@ impl<'gc> Avm2<'gc> {
         }
 
         let el_length = context
+            .gc_data
             .avm2
             .broadcast_list
             .entry(event_name)
@@ -205,6 +217,7 @@ impl<'gc> Avm2<'gc> {
 
         for i in 0..el_length {
             let object = context
+                .gc_data
                 .avm2
                 .broadcast_list
                 .get(&event_name)
@@ -255,7 +268,8 @@ impl<'gc> Avm2<'gc> {
         let tunit = TranslationUnit::from_abc(abc_file.clone(), domain, context.gc_context);
 
         for i in (0..abc_file.scripts.len()).rev() {
-            let mut script = tunit.load_script(i as u32, context.avm2, context.gc_context)?;
+            let mut script =
+                tunit.load_script(i as u32, &mut context.gc_data.avm2, context.gc_context)?;
 
             if !lazy_init {
                 script.globals(context)?;

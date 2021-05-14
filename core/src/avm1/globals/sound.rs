@@ -204,11 +204,12 @@ fn attach_sound<'gc>(
         let name = name.coerce_to_string(activation)?;
         let movie = sound_object
             .owner()
-            .unwrap_or_else(|| activation.context.stage.root_clip())
+            .unwrap_or_else(|| activation.context.gc_data.stage.root_clip())
             .movie();
         if let Some(movie) = movie {
             if let Some(Character::Sound(sound)) = activation
                 .context
+                .gc_data
                 .library
                 .library_for_movie_mut(movie)
                 .character_by_export_name(&name)
@@ -216,7 +217,11 @@ fn attach_sound<'gc>(
                 sound_object.set_sound(activation.context.gc_context, Some(*sound));
                 sound_object.set_duration(
                     activation.context.gc_context,
-                    activation.context.audio.get_sound_duration(*sound),
+                    activation
+                        .context
+                        .player_data
+                        .audio
+                        .get_sound_duration(*sound),
                 );
                 sound_object.set_position(activation.context.gc_context, 0);
             } else {
@@ -313,7 +318,7 @@ fn get_transform<'gc>(
     if let Some(transform) = transform {
         let obj = ScriptObject::object(
             activation.context.gc_context,
-            Some(activation.context.avm1.prototypes.object),
+            Some(activation.context.gc_data.avm1.prototypes.object),
         );
         // Surprisngly `lr` means "right-to-left" and `rl` means "left-to-right".
         obj.set("ll", transform.left_to_left.into(), activation)?;
@@ -539,11 +544,12 @@ fn stop<'gc>(
             let name = name.coerce_to_string(activation)?;
             let movie = sound
                 .owner()
-                .unwrap_or_else(|| activation.context.stage.root_clip())
+                .unwrap_or_else(|| activation.context.gc_data.stage.root_clip())
                 .movie();
             if let Some(movie) = movie {
                 if let Some(Character::Sound(sound)) = activation
                     .context
+                    .gc_data
                     .library
                     .library_for_movie_mut(movie)
                     .character_by_export_name(&name)

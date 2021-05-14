@@ -396,7 +396,10 @@ impl<'a, 'gc> LayoutContext<'a, 'gc> {
         span: &TextSpan,
         is_device_font: bool,
     ) -> Option<Font<'gc>> {
-        let library = context.library.library_for_movie_mut(self.movie.clone());
+        let library = context
+            .gc_data
+            .library
+            .library_for_movie_mut(self.movie.clone());
 
         // If this text field is set to use device fonts, fallback to using our embedded Noto Sans.
         // Note that the SWF can still contain a DefineFont tag with no glyphs/layout info in this case (see #451).
@@ -404,7 +407,7 @@ impl<'a, 'gc> LayoutContext<'a, 'gc> {
         if let Some(font) = library
             .get_font_by_name(&span.font, span.bold, span.italic)
             .filter(|f| !is_device_font && f.has_glyphs())
-            .or_else(|| context.library.device_font())
+            .or_else(|| context.gc_data.library.device_font())
         {
             self.font = Some(font);
             return self.font;
@@ -457,12 +460,15 @@ impl<'a, 'gc> LayoutContext<'a, 'gc> {
     /// should be appended after line fixup has completed, but before the text
     /// cursor is moved down.
     fn append_bullet(&mut self, context: &mut UpdateContext<'_, 'gc, '_>, span: &TextSpan) {
-        let library = context.library.library_for_movie_mut(self.movie.clone());
+        let library = context
+            .gc_data
+            .library
+            .library_for_movie_mut(self.movie.clone());
 
         if let Some(bullet_font) = library
             .get_font_by_name(&span.font, span.bold, span.italic)
             .filter(|f| f.has_glyphs())
-            .or_else(|| context.library.device_font())
+            .or_else(|| context.gc_data.library.device_font())
             .or(self.font)
         {
             let mut bullet_cursor = self.cursor;

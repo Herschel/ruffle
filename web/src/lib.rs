@@ -397,7 +397,7 @@ impl Ruffle {
         // This is unsafe by nature. I don't know any safe way to do this.
         if let Some(context) = CURRENT_CONTEXT.with(|v| *v.borrow()) {
             unsafe {
-                if let Some(callback) = (*context).external_interface.get_callback(name) {
+                if let Some(callback) = (*context).gc_data.external_interface.get_callback(name) {
                     return external_to_js_value(callback.call(&mut *context, name, args));
                 }
             }

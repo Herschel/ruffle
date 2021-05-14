@@ -48,7 +48,7 @@ pub fn graphics<'gc>(
                 activation,
             )? {
                 Value::Undefined | Value::Null => {
-                    let graphics_proto = activation.context.avm2.prototypes().graphics;
+                    let graphics_proto = activation.context.gc_data.avm2.prototypes().graphics;
                     let graphics = Value::from(StageObject::for_display_object(
                         activation.context.gc_context,
                         dobj,

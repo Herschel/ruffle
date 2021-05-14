@@ -129,7 +129,12 @@ pub fn random<'gc>(
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    Ok(activation.context.rng.gen_range(0.0f64..1.0f64).into())
+    Ok(activation
+        .context
+        .player_data
+        .rng
+        .gen_range(0.0f64..1.0f64)
+        .into())
 }
 
 pub fn create<'gc>(
@@ -257,8 +262,8 @@ mod tests {
     fn setup<'gc>(activation: &mut Activation<'_, 'gc, '_>) -> Object<'gc> {
         create(
             activation.context.gc_context,
-            Some(activation.context.avm1.prototypes().object),
-            Some(activation.context.avm1.prototypes().function),
+            Some(activation.context.gc_data.avm1.prototypes().object),
+            Some(activation.context.gc_data.avm1.prototypes().function),
         )
     }
 
@@ -475,8 +480,8 @@ mod tests {
         with_avm(19, |activation, _root| -> Result<(), Error> {
             let math = create(
                 activation.context.gc_context,
-                Some(activation.context.avm1.prototypes().object),
-                Some(activation.context.avm1.prototypes().function),
+                Some(activation.context.gc_data.avm1.prototypes().object),
+                Some(activation.context.gc_data.avm1.prototypes().function),
             );
 
             assert_eq!(atan2(activation, math, &[]).unwrap(), f64::NAN.into());
@@ -501,8 +506,8 @@ mod tests {
         with_avm(19, |activation, _root| -> Result<(), Error> {
             let math = create(
                 activation.context.gc_context,
-                Some(activation.context.avm1.prototypes().object),
-                Some(activation.context.avm1.prototypes().function),
+                Some(activation.context.gc_data.avm1.prototypes().object),
+                Some(activation.context.gc_data.avm1.prototypes().function),
             );
 
             assert_eq!(

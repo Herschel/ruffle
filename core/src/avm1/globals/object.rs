@@ -161,7 +161,13 @@ pub fn register_class<'gc>(
     let registry = activation
         .base_clip()
         .movie()
-        .map(|movie| activation.context.library.library_for_movie_mut(movie))
+        .map(|movie| {
+            activation
+                .context
+                .gc_data
+                .library
+                .library_for_movie_mut(movie)
+        })
         .and_then(|library| library.avm1_constructor_registry());
 
     match registry {

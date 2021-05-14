@@ -48,6 +48,7 @@ pub fn action_script_version<'gc>(
                 LoaderStream::Swf(movie, _) => {
                     let library = activation
                         .context
+                        .gc_data
                         .library
                         .library_for_movie_mut(movie.clone());
                     return Ok(library.avm_type().into_avm2_loader_version().into());
@@ -71,19 +72,34 @@ pub fn application_domain<'gc>(
                 LoaderStream::Stage => {
                     return Ok(DomainObject::from_domain(
                         activation.context.gc_context,
-                        Some(activation.context.avm2.prototypes().application_domain),
-                        activation.context.avm2.global_domain(),
+                        Some(
+                            activation
+                                .context
+                                .gc_data
+                                .avm2
+                                .prototypes()
+                                .application_domain,
+                        ),
+                        activation.context.gc_data.avm2.global_domain(),
                     )
                     .into());
                 }
                 LoaderStream::Swf(movie, _) => {
                     let library = activation
                         .context
+                        .gc_data
                         .library
                         .library_for_movie_mut(movie.clone());
                     return Ok(DomainObject::from_domain(
                         activation.context.gc_context,
-                        Some(activation.context.avm2.prototypes().application_domain),
+                        Some(
+                            activation
+                                .context
+                                .gc_data
+                                .avm2
+                                .prototypes()
+                                .application_domain,
+                        ),
                         library.avm2_domain(),
                     )
                     .into());
@@ -108,7 +124,12 @@ pub fn bytes_total<'gc>(
         if let Some(loader_stream) = this.as_loader_stream() {
             match &*loader_stream {
                 LoaderStream::Stage => {
-                    return Ok(activation.context.swf.compressed_length().into())
+                    return Ok(activation
+                        .context
+                        .player_data
+                        .swf
+                        .compressed_length()
+                        .into())
                 }
                 LoaderStream::Swf(movie, _) => {
                     return Ok(movie.compressed_length().into());
@@ -129,7 +150,9 @@ pub fn content<'gc>(
     if let Some(this) = this {
         if let Some(loader_stream) = this.as_loader_stream() {
             match &*loader_stream {
-                LoaderStream::Stage => return Ok(activation.context.stage.root_clip().object2()),
+                LoaderStream::Stage => {
+                    return Ok(activation.context.gc_data.stage.root_clip().object2())
+                }
                 LoaderStream::Swf(_, root) => {
                     return Ok(root.object2());
                 }
@@ -297,7 +320,7 @@ pub fn bytes<'gc>(
                     return Err("Error: The stage's loader info does not have a bytestream".into())
                 }
                 LoaderStream::Swf(root, _) => {
-                    let ba_proto = activation.context.avm2.prototypes().bytearray;
+                    let ba_proto = activation.context.gc_data.avm2.prototypes().bytearray;
                     let ba =
                         ByteArrayObject::construct(activation.context.gc_context, Some(ba_proto));
                     let mut ba_write = ba.as_bytearray_mut(activation.context.gc_context).unwrap();
@@ -384,7 +407,7 @@ pub fn parameters<'gc>(
                     return Err("Error: The stage's loader info does not have parameters".into())
                 }
                 LoaderStream::Swf(root, _) => {
-                    let object_proto = activation.context.avm2.prototypes().object;
+                    let object_proto = activation.context.gc_data.avm2.prototypes().object;
                     let mut params_obj =
                         ScriptObject::object(activation.context.gc_context, object_proto);
                     let parameters = root.parameters();

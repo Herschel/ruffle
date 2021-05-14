@@ -85,7 +85,7 @@ impl<'gc> TObject<'gc> for DomainObject<'gc> {
         {
             parent_domain
         } else {
-            activation.context.avm2.global_domain()
+            activation.context.gc_data.avm2.global_domain()
         };
 
         Ok(DomainObject::from_domain(
@@ -105,7 +105,7 @@ impl<'gc> TObject<'gc> for DomainObject<'gc> {
         Ok(DomainObject::from_domain(
             activation.context.gc_context,
             Some(this),
-            activation.context.avm2.global_domain(),
+            activation.context.gc_data.avm2.global_domain(),
         ))
     }
 }

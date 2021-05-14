@@ -57,7 +57,12 @@ fn get_sandbox_type<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     Ok(AvmString::new(
         activation.context.gc_context,
-        activation.context.system.sandbox_type.to_string(),
+        activation
+            .context
+            .player_data
+            .system
+            .sandbox_type
+            .to_string(),
     )
     .into())
 }

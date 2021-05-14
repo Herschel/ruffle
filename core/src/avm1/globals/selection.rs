@@ -13,6 +13,7 @@ pub fn get_begin_index<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let Some(selection) = activation
         .context
+        .gc_data
         .focus_tracker
         .get()
         .and_then(|o| o.as_edit_text())
@@ -31,6 +32,7 @@ pub fn get_end_index<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let Some(selection) = activation
         .context
+        .gc_data
         .focus_tracker
         .get()
         .and_then(|o| o.as_edit_text())
@@ -49,6 +51,7 @@ pub fn get_caret_index<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let Some(selection) = activation
         .context
+        .gc_data
         .focus_tracker
         .get()
         .and_then(|o| o.as_edit_text())
@@ -71,6 +74,7 @@ pub fn set_selection<'gc>(
 
     if let Some(edit_box) = activation
         .context
+        .gc_data
         .focus_tracker
         .get()
         .and_then(|o| o.as_edit_text())
@@ -98,7 +102,7 @@ pub fn get_focus<'gc>(
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let focus = activation.context.focus_tracker.get();
+    let focus = activation.context.gc_data.focus_tracker.get();
     match focus {
         Some(focus) => Ok(focus.object()),
         None => Ok(Value::Null),
@@ -110,7 +114,7 @@ pub fn set_focus<'gc>(
     _this: Object<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let tracker = activation.context.focus_tracker;
+    let tracker = activation.context.gc_data.focus_tracker;
     match args.get(0) {
         Some(Value::Null) | Some(Value::Undefined) => {
             tracker.set(None, &mut activation.context);

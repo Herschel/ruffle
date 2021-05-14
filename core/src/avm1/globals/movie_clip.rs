@@ -246,7 +246,7 @@ fn attach_bitmap<'gc>(
 
                 let bitmap_handle = bitmap_data
                     .write(activation.context.gc_context)
-                    .bitmap_handle(activation.context.renderer);
+                    .bitmap_handle(&mut *activation.context.player_data.renderer);
 
                 // TODO: Implement pixel snapping
                 let _pixel_snapping = args
@@ -599,6 +599,7 @@ fn attach_movie<'gc>(
 
     if let Ok(new_clip) = activation
         .context
+        .gc_data
         .library
         .library_for_movie(movie_clip.movie().unwrap())
         .ok_or_else(|| "Movie is missing!".into())
@@ -774,6 +775,7 @@ pub fn duplicate_movie_clip_with_bias<'gc>(
 
     if let Ok(new_clip) = activation
         .context
+        .gc_data
         .library
         .library_for_movie(movie_clip.movie().unwrap())
         .ok_or_else(|| "Movie is missing!".into())
@@ -1057,7 +1059,7 @@ fn stop_drag<'gc>(
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     // It doesn't matter which clip we call this on; it simply stops any active drag.
-    *activation.context.drag_object = None;
+    activation.context.gc_data.drag_object = None;
     Ok(Value::Undefined)
 }
 
@@ -1183,7 +1185,7 @@ fn get_bounds<'gc>(
 
         let out = ScriptObject::object(
             activation.context.gc_context,
-            Some(activation.context.avm1.prototypes.object),
+            Some(activation.context.gc_data.avm1.prototypes.object),
         );
         out.set("xMin", out_bounds.x_min.to_pixels().into(), activation)?;
         out.set("yMin", out_bounds.y_min.to_pixels().into(), activation)?;
@@ -1235,10 +1237,11 @@ pub fn get_url<'gc>(
         };
         let vars_method = method.map(|m| (m, activation.locals_into_form_values()));
 
-        activation
-            .context
-            .navigator
-            .navigate_to_url(url.to_string(), window, vars_method);
+        activation.context.player_data.navigator.navigate_to_url(
+            url.to_string(),
+            window,
+            vars_method,
+        );
     }
 
     Ok(Value::Undefined)
@@ -1287,17 +1290,30 @@ fn load_movie<'gc>(
     let method = args.get(1).cloned().unwrap_or(Value::Undefined);
     let method = NavigationMethod::from_method_str(&method.coerce_to_string(activation)?);
     let (url, opts) = activation.locals_into_request_options(Cow::Borrowed(&url), method);
-    let fetch = activation.context.navigator.fetch(&url, opts);
-    let process = activation.context.load_manager.load_movie_into_clip(
-        activation.context.player.clone().unwrap(),
-        DisplayObject::MovieClip(target),
-        fetch,
-        url.to_string(),
-        None,
-        None,
-    );
+    let fetch = activation.context.player_data.navigator.fetch(&url, opts);
+    let process = activation
+        .context
+        .gc_data
+        .load_manager
+        .load_movie_into_clip(
+            activation
+                .context
+                .player_data
+                .self_reference
+                .clone()
+                .unwrap(),
+            DisplayObject::MovieClip(target),
+            fetch,
+            url.to_string(),
+            None,
+            None,
+        );
 
-    activation.context.navigator.spawn_future(process);
+    activation
+        .context
+        .player_data
+        .navigator
+        .spawn_future(process);
 
     Ok(Value::Undefined)
 }
@@ -1312,15 +1328,28 @@ fn load_variables<'gc>(
     let method = args.get(1).cloned().unwrap_or(Value::Undefined);
     let method = NavigationMethod::from_method_str(&method.coerce_to_string(activation)?);
     let (url, opts) = activation.locals_into_request_options(Cow::Borrowed(&url), method);
-    let fetch = activation.context.navigator.fetch(&url, opts);
+    let fetch = activation.context.player_data.navigator.fetch(&url, opts);
     let target = target.object().coerce_to_object(activation);
-    let process = activation.context.load_manager.load_form_into_object(
-        activation.context.player.clone().unwrap(),
-        target,
-        fetch,
-    );
+    let process = activation
+        .context
+        .gc_data
+        .load_manager
+        .load_form_into_object(
+            activation
+                .context
+                .player_data
+                .self_reference
+                .clone()
+                .unwrap(),
+            target,
+            fetch,
+        );
 
-    activation.context.navigator.spawn_future(process);
+    activation
+        .context
+        .player_data
+        .navigator
+        .spawn_future(process);
 
     Ok(Value::Undefined)
 }
@@ -1340,7 +1369,12 @@ fn transform<'gc>(
     this: MovieClip<'gc>,
     activation: &mut Activation<'_, 'gc, '_>,
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let constructor = activation.context.avm1.prototypes.transform_constructor;
+    let constructor = activation
+        .context
+        .gc_data
+        .avm1
+        .prototypes
+        .transform_constructor;
     let cloned = constructor.construct(activation, &[this.object()])?;
     Ok(cloned)
 }

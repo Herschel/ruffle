@@ -20,7 +20,12 @@ pub fn clone<'gc>(
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let Some(this) = this.as_blur_filter_object() {
-        let proto = activation.context.avm1.prototypes.blur_filter_constructor;
+        let proto = activation
+            .context
+            .gc_data
+            .avm1
+            .prototypes
+            .blur_filter_constructor;
 
         let blur_x = this.get("blurX", activation)?;
         let blur_y = this.get("blurY", activation)?;
@@ -31,7 +36,12 @@ pub fn clone<'gc>(
     }
 
     if let Some(this) = this.as_bevel_filter_object() {
-        let proto = activation.context.avm1.prototypes.bevel_filter_constructor;
+        let proto = activation
+            .context
+            .gc_data
+            .avm1
+            .prototypes
+            .bevel_filter_constructor;
 
         let distance = this.get("distance", activation)?;
         let angle = this.get("angle", activation)?;
@@ -67,7 +77,12 @@ pub fn clone<'gc>(
     }
 
     if let Some(this) = this.as_glow_filter_object() {
-        let proto = activation.context.avm1.prototypes.glow_filter_constructor;
+        let proto = activation
+            .context
+            .gc_data
+            .avm1
+            .prototypes
+            .glow_filter_constructor;
 
         let color = this.get("color", activation)?;
         let alpha = this.get("alpha", activation)?;
@@ -86,6 +101,7 @@ pub fn clone<'gc>(
     if let Some(this) = this.as_drop_shadow_filter_object() {
         let proto = activation
             .context
+            .gc_data
             .avm1
             .prototypes
             .drop_shadow_filter_constructor;
@@ -124,6 +140,7 @@ pub fn clone<'gc>(
     if let Some(this) = this.as_color_matrix_filter_object() {
         let proto = activation
             .context
+            .gc_data
             .avm1
             .prototypes
             .color_matrix_filter_constructor;
@@ -138,6 +155,7 @@ pub fn clone<'gc>(
     if let Some(this) = this.as_displacement_map_filter_object() {
         let proto = activation
             .context
+            .gc_data
             .avm1
             .prototypes
             .displacement_map_filter_constructor;
@@ -173,6 +191,7 @@ pub fn clone<'gc>(
     if let Some(this) = this.as_convolution_filter_object() {
         let proto = activation
             .context
+            .gc_data
             .avm1
             .prototypes
             .convolution_filter_constructor;
@@ -208,6 +227,7 @@ pub fn clone<'gc>(
     if let Some(this) = this.as_gradient_bevel_filter_object() {
         let proto = activation
             .context
+            .gc_data
             .avm1
             .prototypes
             .gradient_bevel_filter_constructor;
@@ -238,6 +258,7 @@ pub fn clone<'gc>(
     if let Some(this) = this.as_gradient_glow_filter_object() {
         let proto = activation
             .context
+            .gc_data
             .avm1
             .prototypes
             .gradient_glow_filter_constructor;

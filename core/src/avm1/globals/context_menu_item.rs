@@ -78,6 +78,7 @@ pub fn copy<'gc>(
 
     let constructor = activation
         .context
+        .gc_data
         .avm1
         .prototypes
         .context_menu_item_constructor;

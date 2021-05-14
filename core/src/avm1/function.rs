@@ -262,7 +262,7 @@ impl<'gc> Executable<'gc> {
                 );
                 let arguments = ScriptObject::array(
                     activation.context.gc_context,
-                    Some(activation.context.avm1.prototypes().array),
+                    Some(activation.context.gc_data.avm1.prototypes().array),
                 );
                 arguments.define_value(
                     activation.context.gc_context,
@@ -307,7 +307,7 @@ impl<'gc> Executable<'gc> {
                 } else {
                     this.as_display_object()
                         .map(|dn| dn.swf_version())
-                        .unwrap_or(activation.context.player_version)
+                        .unwrap_or(activation.context.player_data.player_version)
                 };
 
                 let name = if cfg!(feature = "avm_debug") {
@@ -330,7 +330,7 @@ impl<'gc> Executable<'gc> {
                     Cow::Borrowed("[Anonymous]")
                 };
 
-                let max_recursion_depth = activation.context.avm1.max_recursion_depth();
+                let max_recursion_depth = activation.context.gc_data.avm1.max_recursion_depth();
                 let base_clip = if effective_ver > 5 {
                     af.base_clip
                 } else {
@@ -397,7 +397,7 @@ impl<'gc> Executable<'gc> {
                 }
 
                 if af.preload_global {
-                    let global = frame.context.avm1.global_object();
+                    let global = frame.context.gc_data.avm1.global_object();
                     frame.set_local_register(preload_r, global);
                 }
 

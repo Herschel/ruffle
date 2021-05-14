@@ -114,7 +114,12 @@ fn clone<'gc>(
         this.get("width", activation)?,
         this.get("height", activation)?,
     ];
-    let constructor = activation.context.avm1.prototypes.rectangle_constructor;
+    let constructor = activation
+        .context
+        .gc_data
+        .avm1
+        .prototypes
+        .rectangle_constructor;
     let cloned = constructor.construct(activation, &args)?;
     Ok(cloned)
 }
@@ -288,7 +293,12 @@ fn union<'gc>(
         Value::Number(width),
         Value::Number(height),
     ];
-    let constructor = activation.context.avm1.prototypes.rectangle_constructor;
+    let constructor = activation
+        .context
+        .gc_data
+        .avm1
+        .prototypes
+        .rectangle_constructor;
     let result = constructor.construct(activation, &args)?;
     Ok(result)
 }
@@ -441,7 +451,12 @@ fn intersection<'gc>(
         Value::Number(right - left),
         Value::Number(bottom - top),
     ];
-    let constructor = activation.context.avm1.prototypes.rectangle_constructor;
+    let constructor = activation
+        .context
+        .gc_data
+        .avm1
+        .prototypes
+        .rectangle_constructor;
     let result = constructor.construct(activation, &args)?;
     Ok(result)
 }
@@ -460,8 +475,13 @@ fn equals<'gc>(
         let other_y = other.get("y", activation)?;
         let other_width = other.get("width", activation)?;
         let other_height = other.get("height", activation)?;
-        let proto = activation.context.avm1.prototypes.rectangle;
-        let constructor = activation.context.avm1.prototypes.rectangle_constructor;
+        let proto = activation.context.gc_data.avm1.prototypes.rectangle;
+        let constructor = activation
+            .context
+            .gc_data
+            .avm1
+            .prototypes
+            .rectangle_constructor;
         return Ok((this_x == other_x
             && this_y == other_y
             && this_width == other_width

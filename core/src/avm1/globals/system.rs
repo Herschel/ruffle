@@ -411,7 +411,11 @@ pub fn set_clipboard<'gc>(
         .coerce_to_string(activation)?
         .to_string();
 
-    activation.context.ui.set_clipboard_content(new_content);
+    activation
+        .context
+        .player_data
+        .ui
+        .set_clipboard_content(new_content);
 
     Ok(Value::Undefined)
 }
@@ -450,7 +454,7 @@ pub fn set_use_code_page<'gc>(
         .to_owned()
         .as_bool(activation.swf_version());
 
-    activation.context.system.use_codepage = value;
+    activation.context.player_data.system.use_codepage = value;
 
     Ok(Value::Undefined)
 }
@@ -460,7 +464,7 @@ pub fn get_use_code_page<'gc>(
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    Ok(activation.context.system.use_codepage.into())
+    Ok(activation.context.player_data.system.use_codepage.into())
 }
 
 pub fn set_exact_settings<'gc>(
@@ -474,7 +478,7 @@ pub fn set_exact_settings<'gc>(
         .to_owned()
         .as_bool(activation.swf_version());
 
-    activation.context.system.exact_settings = value;
+    activation.context.player_data.system.exact_settings = value;
 
     Ok(Value::Undefined)
 }
@@ -484,7 +488,7 @@ pub fn get_exact_settings<'gc>(
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    Ok(activation.context.system.exact_settings.into())
+    Ok(activation.context.player_data.system.exact_settings.into())
 }
 
 pub fn on_status<'gc>(

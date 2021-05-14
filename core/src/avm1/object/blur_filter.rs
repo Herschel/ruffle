@@ -69,7 +69,7 @@ impl<'gc> TObject<'gc> for BlurFilterObject<'gc> {
             value,
             activation,
             (*self).into(),
-            Some(activation.context.avm1.prototypes.blur_filter),
+            Some(activation.context.gc_data.avm1.prototypes.blur_filter),
         )
     }
 

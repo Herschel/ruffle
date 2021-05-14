@@ -101,7 +101,7 @@ impl<'gc> TDisplayObject<'gc> for Bitmap<'gc> {
         if let Some(bitmap_data) = &self.0.read().bitmap_data {
             let bd = bitmap_data.read();
             if bd.dirty() {
-                let _ = context.renderer.update_texture(
+                let _ = context.player_data.renderer.update_texture(
                     self.0.read().static_data.bitmap_handle,
                     bd.width(),
                     bd.height(),

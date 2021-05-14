@@ -11,5 +11,11 @@ pub fn get_timer<'gc>(
     _this: Option<Object<'gc>>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error> {
-    Ok((activation.context.navigator.time_since_launch().as_millis() as u32).into())
+    Ok((activation
+        .context
+        .player_data
+        .navigator
+        .time_since_launch()
+        .as_millis() as u32)
+        .into())
 }

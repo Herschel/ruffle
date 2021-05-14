@@ -66,7 +66,7 @@ impl<'gc> TObject<'gc> for XmlIdMapObject<'gc> {
             Ok(node
                 .script_object(
                     activation.context.gc_context,
-                    Some(activation.context.avm1.prototypes().xml_node),
+                    Some(activation.context.gc_data.avm1.prototypes().xml_node),
                 )
                 .into())
         } else {

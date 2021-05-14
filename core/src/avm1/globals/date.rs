@@ -16,7 +16,7 @@ macro_rules! implement_local_getters {
                 |activation: &mut Activation<'_, 'gc, '_>, this, _args| -> Result<Value<'gc>, Error<'gc>> {
                     if let Some(this) = this.as_date_object() {
                         if let Some(date) = this.date_time() {
-                            let local = date.with_timezone(&activation.context.locale.get_timezone());
+                            let local = date.with_timezone(&activation.context.player_data.locale.get_timezone());
                             Ok($fn(&local).into())
                         } else {
                             Ok(f64::NAN.into())
@@ -559,7 +559,7 @@ fn constructor<'gc>(
     let timestamp = args.get(0).unwrap_or(&Value::Undefined);
     if timestamp != &Value::Undefined {
         if args.len() > 1 {
-            let timezone = activation.context.locale.get_timezone();
+            let timezone = activation.context.player_data.locale.get_timezone();
 
             // We need a starting value to adjust from.
             this.set_date_time(
@@ -592,7 +592,13 @@ fn constructor<'gc>(
     } else {
         this.set_date_time(
             activation.context.gc_context,
-            Some(activation.context.locale.get_current_date_time()),
+            Some(
+                activation
+                    .context
+                    .player_data
+                    .locale
+                    .get_current_date_time(),
+            ),
         )
     }
 
@@ -611,7 +617,7 @@ fn create_utc<'gc>(
     // We need a starting value to adjust from.
     let date = DateObject::with_date_time(
         activation.context.gc_context,
-        Some(activation.context.avm1.prototypes.date),
+        Some(activation.context.gc_data.avm1.prototypes.date),
         Some(Utc.ymd(0, 1, 1).and_hms(0, 0, 0)),
     );
 
@@ -637,7 +643,7 @@ fn to_string<'gc>(
     let date = this.date_time();
 
     if let Some(date) = date {
-        let local = date.with_timezone(&activation.context.locale.get_timezone());
+        let local = date.with_timezone(&activation.context.player_data.locale.get_timezone());
         Ok(AvmString::new(
             activation.context.gc_context,
             local.format("%a %b %-d %T GMT%z %-Y").to_string(),
@@ -654,7 +660,7 @@ fn get_timezone_offset<'gc>(
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let date = if let Some(date) = this.date_time() {
-        date.with_timezone(&activation.context.locale.get_timezone())
+        date.with_timezone(&activation.context.player_data.locale.get_timezone())
     } else {
         return Ok(f64::NAN.into());
     };
@@ -673,7 +679,7 @@ fn set_date<'gc>(
         this.set_date_time(activation.context.gc_context, None);
         Ok(f64::NAN.into())
     } else {
-        let timezone = activation.context.locale.get_timezone();
+        let timezone = activation.context.player_data.locale.get_timezone();
         let timestamp = DateAdjustment::new(activation, &timezone)
             .day(args.get(0))?
             .apply(this);
@@ -702,7 +708,7 @@ fn set_year<'gc>(
     this: DateObject<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let timezone = activation.context.locale.get_timezone();
+    let timezone = activation.context.player_data.locale.get_timezone();
     let timestamp = DateAdjustment::new(activation, &timezone)
         .year(args.get(0))?
         .adjust_year(|year| {
@@ -721,7 +727,7 @@ fn set_hours<'gc>(
     this: DateObject<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let timezone = activation.context.locale.get_timezone();
+    let timezone = activation.context.player_data.locale.get_timezone();
     let timestamp = DateAdjustment::new(activation, &timezone)
         .hour(args.get(0))?
         .apply(this);
@@ -747,7 +753,7 @@ fn set_milliseconds<'gc>(
     this: DateObject<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let timezone = activation.context.locale.get_timezone();
+    let timezone = activation.context.player_data.locale.get_timezone();
     let timestamp = DateAdjustment::new(activation, &timezone)
         .millisecond(args.get(0))?
         .apply(this);
@@ -770,7 +776,7 @@ fn set_minutes<'gc>(
     this: DateObject<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let timezone = activation.context.locale.get_timezone();
+    let timezone = activation.context.player_data.locale.get_timezone();
     let timestamp = DateAdjustment::new(activation, &timezone)
         .minute_or(args.get(0), -2147483648.0)?
         .apply(this);
@@ -795,7 +801,7 @@ fn set_month<'gc>(
     this: DateObject<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let timezone = activation.context.locale.get_timezone();
+    let timezone = activation.context.player_data.locale.get_timezone();
     let timestamp = DateAdjustment::new(activation, &timezone)
         .month_or(args.get(0), 0.0)?
         .day_opt(args.get(1))?
@@ -820,7 +826,7 @@ fn set_seconds<'gc>(
     this: DateObject<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let timezone = activation.context.locale.get_timezone();
+    let timezone = activation.context.player_data.locale.get_timezone();
     let timestamp = DateAdjustment::new(activation, &timezone)
         .second(args.get(0))?
         .apply(this);
@@ -864,7 +870,7 @@ fn set_full_year<'gc>(
     this: DateObject<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let timezone = activation.context.locale.get_timezone();
+    let timezone = activation.context.player_data.locale.get_timezone();
     let timestamp = DateAdjustment::new(activation, &timezone)
         .year(args.get(0))?
         .month_opt(args.get(1))?

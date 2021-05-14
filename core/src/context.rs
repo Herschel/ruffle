@@ -1,42 +1,27 @@
 //! Contexts and helper types passed between functions.
-
-use crate::avm1::globals::system::SystemProperties;
-use crate::avm1::{Avm1, Object as Avm1Object, Timers, Value as Avm1Value};
-use crate::avm2::{Avm2, Object as Avm2Object, Value as Avm2Value};
+use crate::avm1::{Object as Avm1Object, Value as Avm1Value};
+use crate::avm2::{Object as Avm2Object, Value as Avm2Value};
 use crate::backend::{
-    audio::{AudioBackend, AudioManager, SoundHandle, SoundInstanceHandle},
-    locale::LocaleBackend,
-    log::LogBackend,
-    navigator::NavigatorBackend,
+    audio::{SoundHandle, SoundInstanceHandle},
     render::RenderBackend,
-    storage::StorageBackend,
     ui::UiBackend,
-    video::VideoBackend,
 };
-use crate::context_menu::ContextMenuState;
-use crate::display_object::{EditText, MovieClip, SoundTransform, Stage};
-use crate::external::ExternalInterface;
-use crate::focus_tracker::FocusTracker;
+use crate::display_object::{MovieClip, SoundTransform, Stage};
 use crate::library::Library;
-use crate::loader::LoadManager;
-use crate::player::{GcRootData, Player, PlayerData};
+use crate::player::{GcRootData, PlayerData};
 use crate::prelude::*;
-use crate::tag_utils::{SwfMovie, SwfSlice};
+use crate::tag_utils::SwfSlice;
 use crate::transform::TransformStack;
 use core::fmt;
 use gc_arena::{Collect, MutationContext};
-use instant::Instant;
-use rand::rngs::SmallRng;
-use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, Mutex, Weak};
-use std::time::Duration;
+use std::collections::VecDeque;
 
 /// `UpdateContext` holds shared data that is used by the various subsystems of Ruffle.
 /// `Player` crates this when it begins a tick and passes it through the call stack to
 /// children and the VM.
 pub struct UpdateContext<'a, 'gc, 'gc_context> {
-    player_data: &'a mut PlayerData,
-    gc_data: &'a mut GcRootData<'gc>,
+    pub player_data: &'a mut PlayerData,
+    pub gc_data: &'a mut GcRootData<'gc>,
     /// The mutation context to allocate and mutate `GcCell` types.
     pub gc_context: MutationContext<'gc, 'gc_context>,
 }
@@ -45,9 +30,9 @@ pub struct UpdateContext<'a, 'gc, 'gc_context> {
 impl<'a, 'gc, 'gc_context> UpdateContext<'a, 'gc, 'gc_context> {
     pub fn update_sounds(&mut self) {
         self.gc_data.audio_manager.update_sounds(
-            self.player_data.audio,
+            &mut *self.player_data.audio,
             self.gc_context,
-            self.gc_data.action_queue,
+            &mut self.gc_data.action_queue,
             self.gc_data.stage.root_clip(),
         );
     }
@@ -69,29 +54,37 @@ impl<'a, 'gc, 'gc_context> UpdateContext<'a, 'gc, 'gc_context> {
         owner: Option<DisplayObject<'gc>>,
         avm1_object: Option<crate::avm1::SoundObject<'gc>>,
     ) -> Option<SoundInstanceHandle> {
-        self.gc_data
-            .audio_manager
-            .start_sound(self.audio, sound, settings, owner, avm1_object)
+        self.gc_data.audio_manager.start_sound(
+            &mut *self.player_data.audio,
+            sound,
+            settings,
+            owner,
+            avm1_object,
+        )
     }
 
     pub fn stop_sound(&mut self, instance: SoundInstanceHandle) {
-        self.gc_data.audio_manager.stop_sound(self.audio, instance)
+        self.gc_data
+            .audio_manager
+            .stop_sound(&mut *self.player_data.audio, instance)
     }
 
     pub fn stop_sounds_with_handle(&mut self, sound: SoundHandle) {
         self.gc_data
             .audio_manager
-            .stop_sounds_with_handle(self.audio, sound)
+            .stop_sounds_with_handle(&mut *self.player_data.audio, sound)
     }
 
     pub fn stop_sounds_with_display_object(&mut self, display_object: DisplayObject<'gc>) {
         self.gc_data
             .audio_manager
-            .stop_sounds_with_display_object(self.audio, display_object)
+            .stop_sounds_with_display_object(&mut *self.player_data.audio, display_object)
     }
 
     pub fn stop_all_sounds(&mut self) {
-        self.gc_data.audio_manager.stop_all_sounds(self.audio)
+        self.gc_data
+            .audio_manager
+            .stop_all_sounds(&mut *self.player_data.audio)
     }
 
     pub fn is_sound_playing_with_handle(&mut self, sound: SoundHandle) -> bool {
@@ -109,7 +102,7 @@ impl<'a, 'gc, 'gc_context> UpdateContext<'a, 'gc, 'gc_context> {
         stream_info: &swf::SoundStreamHead,
     ) -> Option<SoundInstanceHandle> {
         self.gc_data.audio_manager.start_stream(
-            self.player_data.audio,
+            &mut *self.player_data.audio,
             stream_handle,
             movie_clip,
             frame,

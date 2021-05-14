@@ -655,6 +655,7 @@ impl<'gc> EditText<'gc> {
         } else {
             activation
                 .context
+                .gc_data
                 .unbound_text_fields
                 .retain(|&text_field| !DisplayObject::ptr_eq(text_field.into(), self.into()));
         }
@@ -964,7 +965,7 @@ impl<'gc> EditText<'gc> {
             activation.run_with_child_frame_for_display_object(
                 "[Text Field Binding]",
                 parent,
-                activation.context.swf.header().version,
+                activation.context.player_data.swf.header().version,
                 |activation| {
                     if let Ok(Some((object, property))) =
                         activation.resolve_variable_path(parent, &variable)
@@ -1053,7 +1054,7 @@ impl<'gc> EditText<'gc> {
                     activation.run_with_child_frame_for_display_object(
                         "[Propagate Text Binding]",
                         self.parent().unwrap(),
-                        activation.context.swf.header().version,
+                        activation.context.player_data.swf.header().version,
                         |activation| {
                             let _ = object.set(
                                 property,
@@ -1203,8 +1204,8 @@ impl<'gc> EditText<'gc> {
             }
 
             if changed {
-                let globals = context.avm1.global_object_cell();
-                let swf_version = context.swf.header().version;
+                let globals = context.gc_data.avm1.global_object_cell();
+                let swf_version = context.player_data.swf.header().version;
                 let mut activation = Avm1Activation::from_nothing(
                     context.reborrow(),
                     ActivationIdentifier::root("[Propagate Text Binding]"),
@@ -1220,11 +1221,16 @@ impl<'gc> EditText<'gc> {
 
     fn initialize_as_broadcaster(&self, activation: &mut Avm1Activation<'_, 'gc, '_>) {
         if let Avm1Value::Object(object) = self.object() {
-            activation.context.avm1.broadcaster_functions().initialize(
-                activation.context.gc_context,
-                object,
-                activation.context.avm1.prototypes().array,
-            );
+            activation
+                .context
+                .gc_data
+                .avm1
+                .broadcaster_functions()
+                .initialize(
+                    activation.context.gc_context,
+                    object,
+                    activation.context.gc_data.avm1.prototypes().array,
+                );
 
             if let Ok(Avm1Value::Object(listeners)) = object.get("_listeners", activation) {
                 if listeners.length() == 0 {
@@ -1263,7 +1269,7 @@ impl<'gc> EditText<'gc> {
             let object: Avm1Object<'gc> = Avm1StageObject::for_display_object(
                 context.gc_context,
                 display_object,
-                Some(context.avm1.prototypes().text_field),
+                Some(context.gc_data.avm1.prototypes().text_field),
             )
             .into();
 
@@ -1273,12 +1279,12 @@ impl<'gc> EditText<'gc> {
 
         Avm1::run_with_stack_frame_for_display_object(
             (*self).into(),
-            context.swf.version(),
+            context.player_data.swf.version(),
             context,
             |activation| {
                 // If this text field has a variable set, initialize text field binding.
                 if !self.try_bind_text_field_variable(activation, true) {
-                    activation.context.unbound_text_fields.push(*self);
+                    activation.context.gc_data.unbound_text_fields.push(*self);
                 }
                 // People can bind to properties of TextFields the same as other display objects.
                 self.bind_text_field_variables(activation);
@@ -1298,7 +1304,7 @@ impl<'gc> EditText<'gc> {
         context: &mut UpdateContext<'_, 'gc, '_>,
         display_object: DisplayObject<'gc>,
     ) {
-        let mut proto = context.avm2.prototypes().textfield;
+        let mut proto = context.gc_data.avm2.prototypes().textfield;
         let object: Avm2Object<'gc> =
             Avm2StageObject::for_display_object(context.gc_context, display_object, proto).into();
 
@@ -1375,7 +1381,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
         drop(text);
 
         let movie = self.movie().unwrap();
-        let library = context.library.library_for_movie_mut(movie);
+        let library = context.gc_data.library.library_for_movie_mut(movie);
         let vm_type = library.avm_type();
 
         if vm_type == AvmType::Avm1 {
@@ -1567,7 +1573,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
     fn unload(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
         let had_focus = self.0.read().has_focus;
         if had_focus {
-            let tracker = context.focus_tracker;
+            let tracker = context.gc_data.focus_tracker;
             tracker.set(None, context);
         }
 
@@ -1590,6 +1596,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
         }
         if self.variable().is_some() {
             context
+                .gc_data
                 .unbound_text_fields
                 .retain(|&text_field| !DisplayObject::ptr_eq(text_field.into(), (*self).into()));
         }
@@ -1638,10 +1645,10 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
     ) -> ClipEventResult {
         match event {
             ClipEvent::Press => {
-                let tracker = context.focus_tracker;
+                let tracker = context.gc_data.focus_tracker;
                 tracker.set(Some((*self).into()), context);
                 if let Some(position) = self
-                    .screen_position_to_index(*context.mouse_position)
+                    .screen_position_to_index(context.player_data.mouse_pos)
                     .map(TextSelection::for_position)
                 {
                     self.0.write(context.gc_context).selection = Some(position);
@@ -1659,27 +1666,29 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
                     let length = text.len();
                     match key_code {
                         ButtonKeyCode::Left => {
-                            if (context.ui.is_key_down(KeyCode::Shift) || selection.is_caret())
+                            if (context.player_data.ui.is_key_down(KeyCode::Shift)
+                                || selection.is_caret())
                                 && selection.to > 0
                             {
                                 selection.to = string_utils::prev_char_boundary(text, selection.to);
-                                if !context.ui.is_key_down(KeyCode::Shift) {
+                                if !context.player_data.ui.is_key_down(KeyCode::Shift) {
                                     selection.from = selection.to;
                                 }
-                            } else if !context.ui.is_key_down(KeyCode::Shift) {
+                            } else if !context.player_data.ui.is_key_down(KeyCode::Shift) {
                                 selection.to = selection.start();
                                 selection.from = selection.to;
                             }
                         }
                         ButtonKeyCode::Right => {
-                            if (context.ui.is_key_down(KeyCode::Shift) || selection.is_caret())
+                            if (context.player_data.ui.is_key_down(KeyCode::Shift)
+                                || selection.is_caret())
                                 && selection.to < length
                             {
                                 selection.to = string_utils::next_char_boundary(text, selection.to);
-                                if !context.ui.is_key_down(KeyCode::Shift) {
+                                if !context.player_data.ui.is_key_down(KeyCode::Shift) {
                                     selection.from = selection.to;
                                 }
-                            } else if !context.ui.is_key_down(KeyCode::Shift) {
+                            } else if !context.player_data.ui.is_key_down(KeyCode::Shift) {
                                 selection.to = selection.end();
                                 selection.from = selection.to;
                             }

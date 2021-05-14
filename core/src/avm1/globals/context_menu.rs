@@ -20,7 +20,7 @@ pub fn constructor<'gc>(
 
     this.set("onSelect", callback.into(), activation)?;
 
-    let prototype = activation.context.avm1.prototypes.object;
+    let prototype = activation.context.gc_data.avm1.prototypes.object;
     let built_in_items = prototype.create_bare_object(activation, prototype)?;
 
     built_in_items.set("print", true.into(), activation)?;
@@ -34,7 +34,7 @@ pub fn constructor<'gc>(
 
     this.set("builtInItems", built_in_items.into(), activation)?;
 
-    let constructor = activation.context.avm1.prototypes.array_constructor;
+    let constructor = activation.context.gc_data.avm1.prototypes.array_constructor;
     let custom_items = constructor.construct(activation, &[])?;
 
     this.set("customItems", custom_items, activation)?;
@@ -51,7 +51,12 @@ pub fn copy<'gc>(
         .get("onSelect", activation)?
         .coerce_to_object(activation);
 
-    let constructor = activation.context.avm1.prototypes.context_menu_constructor;
+    let constructor = activation
+        .context
+        .gc_data
+        .avm1
+        .prototypes
+        .context_menu_constructor;
     let copy = constructor
         .construct(activation, &[callback.into()])?
         .coerce_to_object(activation);
@@ -165,7 +170,7 @@ pub fn make_context_menu_state<'gc>(
 ) -> context_menu::ContextMenuState<'gc> {
     let mut result = context_menu::ContextMenuState::new();
 
-    let root_mc = activation.context.stage.root_clip().as_movie_clip();
+    let root_mc = activation.context.gc_data.stage.root_clip().as_movie_clip();
     let builtin_items = {
         let is_multiframe_movie = root_mc.map(|mc| mc.total_frames() > 1).unwrap_or(false);
         let mut names = if is_multiframe_movie {

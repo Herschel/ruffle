@@ -159,12 +159,12 @@ impl<'gc> Avm1<'gc> {
         code: SwfSlice,
         context: &mut UpdateContext<'_, 'gc, '_>,
     ) {
-        if context.avm1.halted {
+        if context.gc_data.avm1.halted {
             // We've been told to ignore all future execution.
             return;
         }
 
-        let globals = context.avm1.global_object_cell();
+        let globals = context.gc_data.avm1.global_object_cell();
 
         let mut parent_activation = Activation::from_nothing(
             context.reborrow(),
@@ -185,7 +185,7 @@ impl<'gc> Avm1<'gc> {
                 clip_obj,
             ),
         );
-        let constant_pool = parent_activation.context.avm1.constant_pool;
+        let constant_pool = parent_activation.context.gc_data.avm1.constant_pool;
         let child_name = parent_activation.id.child(name);
         let mut child_activation = Activation::from_action(
             parent_activation.context.reborrow(),
@@ -221,13 +221,13 @@ impl<'gc> Avm1<'gc> {
         };
         let global_scope = GcCell::allocate(
             action_context.gc_context,
-            Scope::from_global_object(action_context.avm1.globals),
+            Scope::from_global_object(action_context.gc_data.avm1.globals),
         );
         let child_scope = GcCell::allocate(
             action_context.gc_context,
             Scope::new(global_scope, scope::ScopeClass::Target, clip_obj),
         );
-        let constant_pool = action_context.avm1.constant_pool;
+        let constant_pool = action_context.gc_data.avm1.constant_pool;
         let mut activation = Activation::from_action(
             action_context.reborrow(),
             ActivationIdentifier::root("[Display Object]"),
@@ -251,12 +251,12 @@ impl<'gc> Avm1<'gc> {
         code: SwfSlice,
         context: &mut UpdateContext<'_, 'gc, '_>,
     ) {
-        if context.avm1.halted {
+        if context.gc_data.avm1.halted {
             // We've been told to ignore all future execution.
             return;
         }
 
-        let globals = context.avm1.global_object_cell();
+        let globals = context.gc_data.avm1.global_object_cell();
 
         let mut parent_activation = Activation::from_nothing(
             context.reborrow(),
@@ -277,8 +277,12 @@ impl<'gc> Avm1<'gc> {
                 clip_obj,
             ),
         );
-        parent_activation.context.avm1.push(Value::Undefined);
-        let constant_pool = parent_activation.context.avm1.constant_pool;
+        parent_activation
+            .context
+            .gc_data
+            .avm1
+            .push(Value::Undefined);
+        let constant_pool = parent_activation.context.gc_data.avm1.constant_pool;
         let child_name = parent_activation.id.child("[Init]");
         let mut child_activation = Activation::from_action(
             parent_activation.context.reborrow(),
@@ -308,12 +312,12 @@ impl<'gc> Avm1<'gc> {
         name: &str,
         args: &[Value<'gc>],
     ) {
-        if context.avm1.halted {
+        if context.gc_data.avm1.halted {
             // We've been told to ignore all future execution.
             return;
         }
 
-        let globals = context.avm1.global_object_cell();
+        let globals = context.gc_data.avm1.global_object_cell();
 
         let mut activation = Activation::from_nothing(
             context.reborrow(),
@@ -338,7 +342,7 @@ impl<'gc> Avm1<'gc> {
         method: &str,
         args: &[Value<'gc>],
     ) {
-        let global = context.avm1.global_object_cell();
+        let global = context.gc_data.avm1.global_object_cell();
 
         let mut activation = Activation::from_nothing(
             context.reborrow(),
@@ -359,7 +363,7 @@ impl<'gc> Avm1<'gc> {
         drop(activation);
 
         if broadcaster_name == "Mouse" {
-            context.avm1.has_mouse_listener = has_listener;
+            context.gc_data.avm1.has_mouse_listener = has_listener;
         }
     }
 
@@ -452,12 +456,12 @@ pub fn root_error_handler<'gc>(activation: &mut Activation<'_, 'gc, '_>, error: 
         let message = error
             .coerce_to_string(activation)
             .unwrap_or_else(|_| "undefined".into());
-        activation.context.log.avm_trace(&message);
+        activation.context.player_data.log.avm_trace(&message);
     } else {
         log::error!("{}", error);
     }
     if error.is_halting() {
-        activation.context.avm1.halt();
+        activation.context.gc_data.avm1.halt();
     }
 }
 
@@ -480,7 +484,7 @@ pub fn start_drag<'gc>(
 ) {
     let lock_center = args
         .get(0)
-        .map(|o| o.as_bool(activation.context.swf.version()))
+        .map(|o| o.as_bool(activation.context.player_data.swf.version()))
         .unwrap_or(false);
 
     let offset = if lock_center {
@@ -491,8 +495,8 @@ pub fn start_drag<'gc>(
         // Calculate the offset from the mouse to the object in world space.
         let obj_pos = display_object.local_to_global(Default::default());
         (
-            obj_pos.0 - activation.context.mouse_position.0,
-            obj_pos.1 - activation.context.mouse_position.1,
+            obj_pos.0 - activation.context.player_data.mouse_pos.0,
+            obj_pos.1 - activation.context.player_data.mouse_pos.1,
         )
     };
 
@@ -551,5 +555,5 @@ pub fn start_drag<'gc>(
         offset,
         constraint,
     };
-    *activation.context.drag_object = Some(drag_object);
+    activation.context.gc_data.drag_object = Some(drag_object);
 }

@@ -108,7 +108,7 @@ fn align<'gc>(
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let align = activation.context.stage.align();
+    let align = activation.context.gc_data.stage.align();
     let mut s = String::with_capacity(4);
     // Match string values returned by AS.
     // It's possible to have an oxymoronic "LTRB".
@@ -144,6 +144,7 @@ fn set_align<'gc>(
         .unwrap_or_default();
     activation
         .context
+        .gc_data
         .stage
         .set_align(&mut activation.context, align);
     Ok(Value::Undefined)
@@ -154,7 +155,7 @@ fn height<'gc>(
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    Ok(activation.context.stage.stage_size().1.into())
+    Ok(activation.context.gc_data.stage.stage_size().1.into())
 }
 
 fn scale_mode<'gc>(
@@ -164,7 +165,7 @@ fn scale_mode<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     let scale_mode = AvmString::new(
         activation.context.gc_context,
-        activation.context.stage.scale_mode().to_string(),
+        activation.context.gc_data.stage.scale_mode().to_string(),
     );
     Ok(scale_mode.into())
 }
@@ -182,6 +183,7 @@ fn set_scale_mode<'gc>(
         .unwrap_or_default();
     activation
         .context
+        .gc_data
         .stage
         .set_scale_mode(&mut activation.context, scale_mode);
     Ok(Value::Undefined)
@@ -192,7 +194,7 @@ fn show_menu<'gc>(
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    Ok(activation.context.stage.show_menu().into())
+    Ok(activation.context.gc_data.stage.show_menu().into())
 }
 
 fn set_show_menu<'gc>(
@@ -207,6 +209,7 @@ fn set_show_menu<'gc>(
         .as_bool(activation.swf_version());
     activation
         .context
+        .gc_data
         .stage
         .set_show_menu(&mut activation.context, show_menu);
     Ok(Value::Undefined)
@@ -217,5 +220,5 @@ fn width<'gc>(
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    Ok(activation.context.stage.stage_size().0.into())
+    Ok(activation.context.gc_data.stage.stage_size().0.into())
 }

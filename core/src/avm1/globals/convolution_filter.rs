@@ -180,7 +180,7 @@ pub fn matrix<'gc>(
     if let Some(filter) = this.as_convolution_filter_object() {
         let array = ScriptObject::array(
             activation.context.gc_context,
-            Some(activation.context.avm1.prototypes.array),
+            Some(activation.context.gc_data.avm1.prototypes.array),
         );
 
         let arr = filter.matrix();
