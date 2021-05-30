@@ -194,7 +194,7 @@ pub mod symphonia {
             }
 
             self.cur_sample = 0;
-            if let Ok(packet) = self.reader.next_packet() {
+            while let Ok(packet) = self.reader.next_packet() {
                 match self.decoder.decode(&packet) {
                     Ok(decoded) => {
                         if self.sample_buf.len() == 0 {
@@ -204,17 +204,16 @@ pub mod symphonia {
                             );
                         }
                         self.sample_buf.copy_interleaved_ref(decoded);
+                        return;
                     }
+                    // Decode errors are not fatal.
                     Err(errors::Error::DecodeError(_)) => (),
-                    Err(_) => {
-                        self.decoder.close();
-                        self.stream_ended = true;
-                    }
+                    Err(_) => break,
                 }
-            } else {
-                self.decoder.close();
-                self.stream_ended = true;
             }
+            // EOF reached.
+            self.decoder.close();
+            self.stream_ended = true;
         }
     }
 
