@@ -6,7 +6,6 @@ use crate::avm2::{
 };
 use crate::context::{RenderContext, UpdateContext};
 use crate::drawing::Drawing;
-use crate::player::NEWEST_PLAYER_VERSION;
 use crate::prelude::*;
 use crate::tag_utils::SwfMovie;
 use crate::transform::Transform;
@@ -413,9 +412,7 @@ impl<'gc> DisplayObjectBase<'gc> {
     }
 
     fn swf_version(&self) -> u8 {
-        self.parent
-            .map(|p| p.swf_version())
-            .unwrap_or(NEWEST_PLAYER_VERSION)
+        self.movie().version()
     }
 
     fn movie(&self) -> Arc<SwfMovie> {
@@ -1186,9 +1183,7 @@ pub trait TDisplayObject<'gc>:
 
     /// Return the version of the SWF that created this movie clip.
     fn swf_version(&self) -> u8 {
-        self.parent()
-            .map(|p| p.swf_version())
-            .unwrap_or(NEWEST_PLAYER_VERSION)
+        self.movie().version()
     }
 
     /// Return the VM that this object belongs to.
