@@ -1329,6 +1329,10 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
         self.0.read().static_data.text.id
     }
 
+    fn source_movie(&self) -> Option<Arc<SwfMovie>> {
+        Some(self.0.read().static_data.swf.clone())
+    }
+
     /// Construct objects placed on this frame.
     fn construct_frame(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
         if self.avm_type() == AvmType::Avm2 && matches!(self.object2(), Avm2Value::Undefined) {

@@ -51,6 +51,10 @@ impl<'gc> TDisplayObject<'gc> for MorphShape<'gc> {
         self.0.read().static_data.id
     }
 
+    fn source_movie(&self) -> Option<Arc<SwfMovie>> {
+        Some(self.0.read().static_data.movie.clone())
+    }
+
     fn as_morph_shape(&self) -> Option<Self> {
         Some(*self)
     }

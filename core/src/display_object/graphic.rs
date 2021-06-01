@@ -106,6 +106,10 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
         self.0.read().static_data.id
     }
 
+    fn source_movie(&self) -> Option<Arc<SwfMovie>> {
+        self.0.read().static_data.movie.clone()
+    }
+
     fn self_bounds(&self) -> BoundingBox {
         if let Some(drawing) = &self.0.read().drawing {
             drawing.self_bounds()

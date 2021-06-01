@@ -1668,6 +1668,10 @@ impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
         self.0.read().id()
     }
 
+    fn source_movie(&self) -> Option<Arc<SwfMovie>> {
+        Some(self.0.read().static_data.swf.movie.clone())
+    }
+
     fn swf_version(&self) -> u8 {
         self.movie().version()
     }
@@ -2310,8 +2314,10 @@ impl<'gc, 'a> MovieClipData<'gc> {
         let bitmap_info = context
             .renderer
             .register_bitmap_png(&define_bits_lossless)?;
+        let movie = self.movie();
         let bitmap = crate::display_object::Bitmap::new(
             context,
+            movie.clone(),
             define_bits_lossless.id,
             bitmap_info.handle,
             bitmap_info.width,
@@ -2319,7 +2325,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
         );
         context
             .library
-            .library_for_movie_mut(self.movie())
+            .library_for_movie_mut(movie)
             .register_character(define_bits_lossless.id, Character::Bitmap(bitmap));
         Ok(())
     }
@@ -2509,15 +2515,17 @@ impl<'gc, 'a> MovieClipData<'gc> {
         let data_len = tag_len - 2;
         let mut jpeg_data = Vec::with_capacity(data_len);
         reader.get_mut().read_to_end(&mut jpeg_data)?;
+        let movie = self.movie();
         let bitmap_info = context.renderer.register_bitmap_jpeg(
             &jpeg_data,
             context
                 .library
-                .library_for_movie_mut(self.movie())
+                .library_for_movie_mut(movie.clone())
                 .jpeg_tables(),
         )?;
         let bitmap = crate::display_object::Bitmap::new(
             context,
+            movie.clone(),
             id,
             bitmap_info.handle,
             bitmap_info.width,
@@ -2525,7 +2533,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
         );
         context
             .library
-            .library_for_movie_mut(self.movie())
+            .library_for_movie_mut(movie.clone())
             .register_character(id, Character::Bitmap(bitmap));
         Ok(())
     }
@@ -2543,8 +2551,10 @@ impl<'gc, 'a> MovieClipData<'gc> {
         let mut jpeg_data = Vec::with_capacity(data_len);
         reader.get_mut().read_to_end(&mut jpeg_data)?;
         let bitmap_info = context.renderer.register_bitmap_jpeg_2(&jpeg_data)?;
+        let movie = self.movie();
         let bitmap = crate::display_object::Bitmap::new(
             context,
+            movie.clone(),
             id,
             bitmap_info.handle,
             bitmap_info.width,
@@ -2552,7 +2562,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
         );
         context
             .library
-            .library_for_movie_mut(self.movie())
+            .library_for_movie_mut(movie)
             .register_character(id, Character::Bitmap(bitmap));
         Ok(())
     }
@@ -2583,8 +2593,10 @@ impl<'gc, 'a> MovieClipData<'gc> {
         let bitmap_info = context
             .renderer
             .register_bitmap_jpeg_3(&jpeg_data, &alpha_data)?;
+        let movie = self.movie();
         let bitmap = Bitmap::new(
             context,
+            movie.clone(),
             id,
             bitmap_info.handle,
             bitmap_info.width,
@@ -2592,7 +2604,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
         );
         context
             .library
-            .library_for_movie_mut(self.movie())
+            .library_for_movie_mut(movie)
             .register_character(id, Character::Bitmap(bitmap));
         Ok(())
     }
@@ -2624,8 +2636,10 @@ impl<'gc, 'a> MovieClipData<'gc> {
         let bitmap_info = context
             .renderer
             .register_bitmap_jpeg_3(&jpeg_data, &alpha_data)?;
+        let movie = self.movie();
         let bitmap = Bitmap::new(
             context,
+            movie.clone(),
             id,
             bitmap_info.handle,
             bitmap_info.width,
@@ -2633,7 +2647,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
         );
         context
             .library
-            .library_for_movie_mut(self.movie())
+            .library_for_movie_mut(movie)
             .register_character(id, Character::Bitmap(bitmap));
         Ok(())
     }

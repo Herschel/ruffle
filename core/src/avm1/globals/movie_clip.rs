@@ -208,6 +208,7 @@ fn attach_bitmap<'gc>(
                     //TODO: do attached BitmapDatas have character ids?
                     let display_object = Bitmap::new_with_bitmap_data(
                         &mut activation.context,
+                        None,
                         0,
                         bitmap_handle,
                         bitmap_data.read().width() as u16,

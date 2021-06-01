@@ -488,8 +488,18 @@ pub trait TDisplayObject<'gc>:
 {
     fn id(&self) -> CharacterId;
 
-    /// The movie that created this DisplayObject.
+    /// The movie that created this display object.
     fn movie(&self) -> Arc<SwfMovie>;
+
+    /// The movie that owns the source asset of this DisplayObject.
+    ///
+    /// Dynamically created empty display objects will return `None`.
+    /// For AVM1 movies, this returns the same movie as `DisplayObject::movie`.
+    /// For AVM2 movies, this will differ because display objects can be reparented to a different
+    /// movie.
+    fn source_movie(&self) -> Option<Arc<SwfMovie>> {
+        None
+    }
 
     fn depth(&self) -> Depth;
     fn set_depth(&self, gc_context: MutationContext<'gc, '_>, depth: Depth);

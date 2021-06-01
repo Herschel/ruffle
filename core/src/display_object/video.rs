@@ -391,6 +391,12 @@ impl<'gc> TDisplayObject<'gc> for Video<'gc> {
         }
     }
 
+    fn source_movie(&self) -> Option<Arc<SwfMovie>> {
+        match (*self.0.read().source.read()).borrow() {
+            VideoSource::Swf { movie, .. } => Some(movie.clone()),
+        }
+    }
+
     fn self_bounds(&self) -> BoundingBox {
         let mut bounding_box = BoundingBox::default();
 

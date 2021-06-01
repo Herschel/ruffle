@@ -61,6 +61,10 @@ impl<'gc> TDisplayObject<'gc> for Text<'gc> {
         self.0.read().static_data.id
     }
 
+    fn source_movie(&self) -> Option<Arc<SwfMovie>> {
+        Some(self.0.read().static_data.swf.clone())
+    }
+
     fn run_frame(&self, _context: &mut UpdateContext) {
         // Noop
     }

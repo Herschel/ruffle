@@ -4,8 +4,10 @@ use crate::backend::render::BitmapHandle;
 use crate::context::{RenderContext, UpdateContext};
 use crate::display_object::{DisplayObjectBase, TDisplayObject};
 use crate::prelude::*;
+use crate::tag_utils::SwfMovie;
 use crate::types::{Degrees, Percent};
 use gc_arena::{Collect, Gc, GcCell};
+use std::sync::Arc;
 
 /// A Bitmap display object is a raw bitamp on the stage.
 /// This can only be instanitated on the display list in SWFv9 AVM2 files.
@@ -30,6 +32,7 @@ pub struct BitmapData<'gc> {
 impl<'gc> Bitmap<'gc> {
     pub fn new_with_bitmap_data(
         context: &mut UpdateContext<'_, 'gc, '_>,
+        movie: Option<Arc<SwfMovie>>,
         id: CharacterId,
         bitmap_handle: BitmapHandle,
         width: u16,
@@ -44,6 +47,7 @@ impl<'gc> Bitmap<'gc> {
                 static_data: Gc::allocate(
                     context.gc_context,
                     BitmapStatic {
+                        movie,
                         id,
                         bitmap_handle,
                         width,
@@ -58,12 +62,22 @@ impl<'gc> Bitmap<'gc> {
 
     pub fn new(
         context: &mut UpdateContext<'_, 'gc, '_>,
+        movie: Arc<SwfMovie>,
         id: CharacterId,
         bitmap_handle: BitmapHandle,
         width: u16,
         height: u16,
     ) -> Self {
-        Self::new_with_bitmap_data(context, id, bitmap_handle, width, height, None, true)
+        Self::new_with_bitmap_data(
+            context,
+            Some(movie),
+            id,
+            bitmap_handle,
+            width,
+            height,
+            None,
+            true,
+        )
     }
 
     #[allow(dead_code)]
@@ -85,6 +99,10 @@ impl<'gc> TDisplayObject<'gc> for Bitmap<'gc> {
 
     fn id(&self) -> CharacterId {
         self.0.read().static_data.id
+    }
+
+    fn source_movie(&self) -> Option<Arc<SwfMovie>> {
+        self.0.read().static_data.movie.clone()
     }
 
     fn self_bounds(&self) -> BoundingBox {
@@ -132,6 +150,7 @@ impl<'gc> TDisplayObject<'gc> for Bitmap<'gc> {
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
 struct BitmapStatic {
+    movie: Option<Arc<SwfMovie>>,
     id: CharacterId,
     bitmap_handle: BitmapHandle,
     width: u16,

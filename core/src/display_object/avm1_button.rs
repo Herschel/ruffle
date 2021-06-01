@@ -235,6 +235,10 @@ impl<'gc> Avm1Button<'gc> {
 impl<'gc> TDisplayObject<'gc> for Avm1Button<'gc> {
     impl_display_object!(base);
 
+    fn source_movie(&self) -> Option<Arc<SwfMovie>> {
+        Some(self.0.read().static_data.read().swf.clone())
+    }
+
     fn id(&self) -> CharacterId {
         self.0.read().static_data.read().id
     }
