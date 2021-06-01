@@ -831,7 +831,7 @@ mod tests {
             let mut context = UpdateContext {
                 gc_context,
                 player_version: 32,
-                swf: &swf,
+                movie: &swf,
                 stage,
                 rng: &mut SmallRng::from_seed([0u8; 32]),
                 action_queue: &mut crate::context::ActionQueue::new(),
@@ -872,7 +872,7 @@ mod tests {
             root.post_instantiation(&mut context, root, None, Instantiator::Movie, false);
             root.set_name(context.gc_context, "");
 
-            let swf_version = context.swf.version();
+            let swf_version = context.movie.version();
             let mut activation = Activation::from_nothing(
                 context,
                 ActivationIdentifier::root("[Test]"),

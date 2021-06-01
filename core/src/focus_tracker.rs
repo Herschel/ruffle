@@ -46,7 +46,7 @@ impl<'gc> FocusTracker<'gc> {
         let level0 = context.stage.root_clip();
         Avm1::notify_system_listeners(
             level0,
-            context.swf.version(),
+            context.movie.version(),
             context,
             "Selection",
             "onSetFocus",

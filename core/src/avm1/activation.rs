@@ -341,7 +341,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
         context: UpdateContext<'a, 'gc, 'gc_context>,
         id: ActivationIdentifier<'a>,
     ) -> Self {
-        let version = context.swf.version();
+        let version = context.movie.version();
         let globals = context.avm1.global_object_cell();
         let level0 = context.stage.root_clip();
 

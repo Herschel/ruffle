@@ -65,7 +65,7 @@ impl<'gc> Avm1Button<'gc> {
         }
 
         let static_data = ButtonStatic {
-            swf: source_movie.movie.clone(),
+            movie: source_movie.movie.clone(),
             id: button.id,
             records: button.records.clone(),
             actions,
@@ -236,7 +236,7 @@ impl<'gc> TDisplayObject<'gc> for Avm1Button<'gc> {
     impl_display_object!(base);
 
     fn source_movie(&self) -> Option<Arc<SwfMovie>> {
-        Some(self.0.read().static_data.read().swf.clone())
+        Some(self.0.read().static_data.read().movie.clone())
     }
 
     fn id(&self) -> CharacterId {
@@ -287,7 +287,7 @@ impl<'gc> TDisplayObject<'gc> for Avm1Button<'gc> {
                 if record.states.contains(swf::ButtonState::HIT_TEST) {
                     match context
                         .library
-                        .library_for_movie_mut(read.static_data.read().swf.clone())
+                        .library_for_movie_mut(read.static_data.read().movie.clone())
                         .instantiate_by_id(record.id, context.gc_context)
                     {
                         Ok(child) => {
@@ -482,7 +482,7 @@ impl<'gc> TDisplayObject<'gc> for Avm1Button<'gc> {
 
         // Queue ActionScript-defined event handlers after the SWF defined ones.
         // (e.g., clip.onRelease = foo).
-        if context.swf.version() >= 6 {
+        if context.movie.version() >= 6 {
             if let Some(name) = event.method_name() {
                 context.action_queue.queue_actions(
                     self_display_object,
@@ -576,7 +576,7 @@ impl<'gc> Avm1ButtonData<'gc> {
     }
 
     fn movie(&self) -> Arc<SwfMovie> {
-        self.static_data.read().swf.clone()
+        self.static_data.read().movie.clone()
     }
 }
 
@@ -608,7 +608,7 @@ enum ButtonTracking {
 #[derive(Clone, Debug, Collect)]
 #[collect(require_static)]
 struct ButtonStatic {
-    swf: Arc<SwfMovie>,
+    movie: Arc<SwfMovie>,
     id: CharacterId,
     records: Vec<swf::ButtonRecord>,
     actions: Vec<ButtonAction>,

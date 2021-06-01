@@ -89,12 +89,12 @@ pub struct MovieClipData<'gc> {
 
 impl<'gc> MovieClip<'gc> {
     #[allow(dead_code)]
-    pub fn new(swf: SwfSlice, gc_context: MutationContext<'gc, '_>) -> Self {
+    pub fn new(data: SwfSlice, gc_context: MutationContext<'gc, '_>) -> Self {
         MovieClip(GcCell::allocate(
             gc_context,
             MovieClipData {
-                base: DisplayObjectBase::with_movie(swf.movie.clone()),
-                static_data: Gc::allocate(gc_context, MovieClipStatic::empty(swf)),
+                base: DisplayObjectBase::with_movie(data.movie.clone()),
+                static_data: Gc::allocate(gc_context, MovieClipStatic::empty(data)),
                 tag_stream_pos: 0,
                 current_frame: 0,
                 audio_stream: None,
@@ -117,7 +117,7 @@ impl<'gc> MovieClip<'gc> {
     }
 
     pub fn new_with_avm2(
-        swf: SwfSlice,
+        data: SwfSlice,
         this: Avm2Object<'gc>,
         constr: Avm2Object<'gc>,
         gc_context: MutationContext<'gc, '_>,
@@ -125,8 +125,8 @@ impl<'gc> MovieClip<'gc> {
         MovieClip(GcCell::allocate(
             gc_context,
             MovieClipData {
-                base: DisplayObjectBase::with_movie(swf.movie.clone()),
-                static_data: Gc::allocate(gc_context, MovieClipStatic::empty(swf)),
+                base: DisplayObjectBase::with_movie(data.movie.clone()),
+                static_data: Gc::allocate(gc_context, MovieClipStatic::empty(data)),
                 tag_stream_pos: 0,
                 current_frame: 0,
                 audio_stream: None,
@@ -151,16 +151,16 @@ impl<'gc> MovieClip<'gc> {
     pub fn new_with_data(
         gc_context: MutationContext<'gc, '_>,
         id: CharacterId,
-        swf: SwfSlice,
+        data: SwfSlice,
         num_frames: u16,
     ) -> Self {
         MovieClip(GcCell::allocate(
             gc_context,
             MovieClipData {
-                base: DisplayObjectBase::with_movie(swf.movie.clone()),
+                base: DisplayObjectBase::with_movie(data.movie.clone()),
                 static_data: Gc::allocate(
                     gc_context,
-                    MovieClipStatic::with_data(id, swf, num_frames),
+                    MovieClipStatic::with_data(id, data, num_frames),
                 ),
                 tag_stream_pos: 0,
                 current_frame: 0,
@@ -241,7 +241,7 @@ impl<'gc> MovieClip<'gc> {
         // TODO: Re-creating static data because preload step occurs after construction.
         // Should be able to hoist this up somewhere, or use MaybeUninit.
         let mut static_data = (&*self.0.read().static_data).clone();
-        let data = self.0.read().static_data.swf.clone();
+        let data = self.0.read().static_data.data.clone();
         let mut reader = data.read_from(0);
         let mut cur_frame = 1;
         let mut ids = fnv::FnvHashMap::default();
@@ -495,7 +495,7 @@ impl<'gc> MovieClip<'gc> {
             .0
             .read()
             .static_data
-            .swf
+            .data
             .resize_to_reader(reader, tag_len)
             .ok_or_else(|| {
                 std::io::Error::new(
@@ -504,7 +504,7 @@ impl<'gc> MovieClip<'gc> {
                 )
             })?;
 
-        Avm1::run_stack_frame_for_init_action(self.into(), context.swf.version(), slice, context);
+        Avm1::run_stack_frame_for_init_action(self.into(), context.movie.version(), slice, context);
 
         Ok(())
     }
@@ -538,7 +538,7 @@ impl<'gc> MovieClip<'gc> {
             .0
             .read()
             .static_data
-            .swf
+            .data
             .resize_to_reader(reader, tag_len)
             .ok_or_else(|| {
                 std::io::Error::new(
@@ -987,7 +987,7 @@ impl<'gc> MovieClip<'gc> {
         if frame > 0 && frame <= self.total_frames() {
             let mut cur_frame = 1;
             let clip = self.0.read();
-            let mut reader = clip.static_data.swf.read_from(0);
+            let mut reader = clip.static_data.data.read_from(0);
             while cur_frame <= frame && !reader.get_ref().is_empty() {
                 let tag_callback = |reader: &mut Reader<'_>, tag_code, tag_len| {
                     match tag_code {
@@ -995,7 +995,7 @@ impl<'gc> MovieClip<'gc> {
                         TagCode::DoAction if cur_frame == frame => {
                             // On the target frame, add any DoAction tags to the array.
                             if let Some(code) =
-                                clip.static_data.swf.resize_to_reader(reader, tag_len)
+                                clip.static_data.data.resize_to_reader(reader, tag_len)
                             {
                                 actions.push(code)
                             }
@@ -1045,8 +1045,8 @@ impl<'gc> MovieClip<'gc> {
         }
 
         let mc = self.0.read();
-        let tag_stream_start = mc.static_data.swf.as_ref().as_ptr() as u64;
-        let data = mc.static_data.swf.clone();
+        let tag_stream_start = mc.static_data.data.as_ref().as_ptr() as u64;
+        let data = mc.static_data.data.clone();
         let mut reader = data.read_from(mc.tag_stream_pos);
         let mut has_stream_block = false;
         drop(mc);
@@ -1239,9 +1239,9 @@ impl<'gc> MovieClip<'gc> {
 
         // Step through the intermediate frames, and aggregate the deltas of each frame.
         let mc = self.0.read();
-        let tag_stream_start = mc.static_data.swf.as_ref().as_ptr() as u64;
+        let tag_stream_start = mc.static_data.data.as_ref().as_ptr() as u64;
         let mut frame_pos = mc.tag_stream_pos;
-        let data = mc.static_data.swf.clone();
+        let data = mc.static_data.data.clone();
         let mut index = 0;
 
         // Sanity; let's make sure we don't seek way too far.
@@ -1381,7 +1381,7 @@ impl<'gc> MovieClip<'gc> {
     ) {
         //TODO: This will break horribly when AVM2 starts touching the display list
         if self.0.read().object.is_none() {
-            let version = context.swf.version();
+            let version = context.movie.version();
             let globals = context.avm1.global_object_cell();
             let avm1_constructor = self.0.read().get_registered_avm1_constructor(context);
 
@@ -1480,7 +1480,7 @@ impl<'gc> MovieClip<'gc> {
         // If this text field has a variable set, initialize text field binding.
         Avm1::run_with_stack_frame_for_display_object(
             self.into(),
-            context.swf.version(),
+            context.movie.version(),
             context,
             |activation| {
                 self.bind_text_field_variables(activation);
@@ -1669,7 +1669,7 @@ impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
     }
 
     fn source_movie(&self) -> Option<Arc<SwfMovie>> {
-        Some(self.0.read().static_data.swf.movie.clone())
+        Some(self.0.read().static_data.data.movie.clone())
     }
 
     fn swf_version(&self) -> u8 {
@@ -1697,7 +1697,7 @@ impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
 
             if self.determine_next_frame() != NextFrame::First {
                 let mc = self.0.read();
-                let data = mc.static_data.swf.clone();
+                let data = mc.static_data.data.clone();
                 let mut reader = data.read_from(mc.tag_stream_pos);
                 drop(mc);
 
@@ -2143,7 +2143,7 @@ impl<'gc> MovieClipData<'gc> {
     }
 
     fn tag_stream_len(&self) -> usize {
-        self.static_data.swf.end - self.static_data.swf.start
+        self.static_data.data.end - self.static_data.data.start
     }
 
     /// Handles a PlaceObject tag when running a goto action.
@@ -2187,7 +2187,7 @@ impl<'gc> MovieClipData<'gc> {
 
         if let Some(AvmObject::Avm1(object)) = self.object {
             // TODO: What's the behavior for loaded SWF files?
-            if context.swf.version() >= 5 {
+            if context.movie.version() >= 5 {
                 for clip_action in self
                     .clip_actions
                     .iter()
@@ -2208,7 +2208,7 @@ impl<'gc> MovieClipData<'gc> {
 
                 // Queue ActionScript-defined event handlers after the SWF defined ones.
                 // (e.g., clip.onEnterFrame = foo).
-                if context.swf.version() >= 6 {
+                if context.movie.version() >= 6 {
                     if let Some(name) = event.method_name() {
                         // Keyboard events don't fire their methods unless the movieclip has focus (#2120).
                         if !event.is_key_event() || self.has_focus {
@@ -2297,7 +2297,7 @@ impl<'gc> MovieClipData<'gc> {
     }
 
     pub fn movie(&self) -> Arc<SwfMovie> {
-        self.static_data.swf.movie.clone()
+        self.static_data.data.movie.clone()
     }
 }
 
@@ -2685,7 +2685,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
         if library.avm_type() == AvmType::Avm1 {
             let button = Avm1Button::from_swf_tag(
                 &swf_button,
-                &self.static_data.swf,
+                &self.static_data.data,
                 &context.library,
                 context.gc_context,
             );
@@ -2694,7 +2694,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
                 .library_for_movie_mut(movie)
                 .register_character(swf_button.id, Character::Avm1Button(button));
         } else {
-            let button = Avm2Button::from_swf_tag(&swf_button, &self.static_data.swf, context);
+            let button = Avm2Button::from_swf_tag(&swf_button, &self.static_data.data, context);
             context
                 .library
                 .library_for_movie_mut(movie)
@@ -2932,7 +2932,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
             context.gc_context,
             id,
             self.static_data
-                .swf
+                .data
                 .resize_to_reader(reader, tag_len - 4)
                 .ok_or_else(|| {
                     std::io::Error::new(
@@ -3092,7 +3092,7 @@ impl<'gc, 'a> MovieClip<'gc> {
             .0
             .read()
             .static_data
-            .swf
+            .data
             .resize_to_reader(reader, tag_len)
             .ok_or_else(|| {
                 std::io::Error::new(
@@ -3203,7 +3203,7 @@ impl<'gc, 'a> MovieClip<'gc> {
             {
                 let slice = mc
                     .static_data
-                    .swf
+                    .data
                     .to_start_and_end(mc.tag_stream_pos as usize, mc.tag_stream_len())
                     .ok_or_else(|| {
                         std::io::Error::new(
@@ -3294,7 +3294,7 @@ impl Default for Scene {
 #[collect(require_static)]
 struct MovieClipStatic {
     id: CharacterId,
-    swf: SwfSlice,
+    data: SwfSlice,
     frame_labels: HashMap<String, FrameNumber>,
     scene_labels: HashMap<String, Scene>,
     audio_stream_info: Option<swf::SoundStreamHead>,
@@ -3306,14 +3306,14 @@ struct MovieClipStatic {
 }
 
 impl MovieClipStatic {
-    fn empty(swf: SwfSlice) -> Self {
-        Self::with_data(0, swf, 1)
+    fn empty(data: SwfSlice) -> Self {
+        Self::with_data(0, data, 1)
     }
 
-    fn with_data(id: CharacterId, swf: SwfSlice, total_frames: FrameNumber) -> Self {
+    fn with_data(id: CharacterId, data: SwfSlice, total_frames: FrameNumber) -> Self {
         Self {
             id,
-            swf,
+            data,
             total_frames,
             frame_labels: HashMap::new(),
             scene_labels: HashMap::new(),

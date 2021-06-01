@@ -31,7 +31,7 @@ pub fn instance_init<'gc>(
             let constr = proto
                 .get_property(proto, &QName::dynamic_name("constructor"), activation)?
                 .coerce_to_object(activation)?;
-            let movie = Arc::new(SwfMovie::empty(activation.context.swf.version()));
+            let movie = Arc::new(SwfMovie::empty(activation.context.movie.version()));
             let new_do = MovieClip::new_with_avm2(
                 SwfSlice::empty(movie),
                 this,

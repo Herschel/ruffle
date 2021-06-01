@@ -37,7 +37,7 @@ impl<'gc> Timers<'gc> {
             return None;
         }
 
-        let version = context.swf.version();
+        let version = context.movie.version();
         let globals = context.avm1.global_object_cell();
         let level0 = context.stage.root_clip();
 

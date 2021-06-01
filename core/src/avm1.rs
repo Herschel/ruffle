@@ -483,7 +483,7 @@ pub fn start_drag<'gc>(
 ) {
     let lock_center = args
         .get(0)
-        .map(|o| o.as_bool(activation.context.swf.version()))
+        .map(|o| o.as_bool(activation.context.movie.version()))
         .unwrap_or(false);
 
     let offset = if lock_center {

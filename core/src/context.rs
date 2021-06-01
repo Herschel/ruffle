@@ -57,7 +57,7 @@ pub struct UpdateContext<'a, 'gc, 'gc_context> {
     pub needs_render: &'a mut bool,
 
     /// The root SWF file.
-    pub swf: &'a Arc<SwfMovie>,
+    pub movie: &'a Arc<SwfMovie>,
 
     /// The audio backend, used by display objects and AVM to play audio.
     pub audio: &'a mut dyn AudioBackend,
@@ -253,7 +253,7 @@ impl<'a, 'gc, 'gc_context> UpdateContext<'a, 'gc, 'gc_context> {
             library: self.library,
             player_version: self.player_version,
             needs_render: self.needs_render,
-            swf: self.swf,
+            movie: self.movie,
             audio: self.audio,
             audio_manager: self.audio_manager,
             navigator: self.navigator,

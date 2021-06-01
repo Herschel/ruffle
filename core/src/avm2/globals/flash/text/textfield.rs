@@ -25,7 +25,7 @@ pub fn instance_init<'gc>(
         activation.super_init(this, &[])?;
 
         if this.as_display_object().is_none() {
-            let movie = Arc::new(SwfMovie::empty(activation.context.swf.version()));
+            let movie = Arc::new(SwfMovie::empty(activation.context.movie.version()));
             let movie_library = activation
                 .context
                 .library

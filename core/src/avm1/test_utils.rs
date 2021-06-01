@@ -47,7 +47,7 @@ where
         let mut context = UpdateContext {
             gc_context,
             player_version: 32,
-            swf: &swf,
+            movie: &swf,
             stage,
             rng: &mut SmallRng::from_seed([0u8; 32]),
             audio: &mut NullAudioBackend::new(),
@@ -102,7 +102,7 @@ where
             }
         }
 
-        let swf_version = context.swf.version();
+        let swf_version = context.movie.version();
         let mut activation = Activation::from_nothing(
             context,
             ActivationIdentifier::root("[Test]"),

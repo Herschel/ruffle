@@ -23,17 +23,17 @@ pub struct TextData<'gc> {
 impl<'gc> Text<'gc> {
     pub fn from_swf_tag(
         context: &mut UpdateContext<'_, 'gc, '_>,
-        swf: Arc<SwfMovie>,
+        movie: Arc<SwfMovie>,
         tag: &swf::Text,
     ) -> Self {
         Text(GcCell::allocate(
             context.gc_context,
             TextData {
-                base: DisplayObjectBase::with_movie(swf.clone()),
+                base: DisplayObjectBase::with_movie(movie.clone()),
                 static_data: gc_arena::Gc::allocate(
                     context.gc_context,
                     TextStatic {
-                        swf,
+                        movie,
                         id: tag.id,
                         bounds: tag.bounds.clone().into(),
                         text_transform: tag.matrix,
@@ -62,7 +62,7 @@ impl<'gc> TDisplayObject<'gc> for Text<'gc> {
     }
 
     fn source_movie(&self) -> Option<Arc<SwfMovie>> {
-        Some(self.0.read().static_data.swf.clone())
+        Some(self.0.read().static_data.movie.clone())
     }
 
     fn run_frame(&self, _context: &mut UpdateContext) {
@@ -198,7 +198,7 @@ impl<'gc> TDisplayObject<'gc> for Text<'gc> {
 #[derive(Debug, Clone, Collect)]
 #[collect(require_static)]
 struct TextStatic {
-    swf: Arc<SwfMovie>,
+    movie: Arc<SwfMovie>,
     id: CharacterId,
     bounds: BoundingBox,
     text_transform: Matrix,

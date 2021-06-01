@@ -87,7 +87,7 @@ impl<'gc> Avm2Button<'gc> {
         }
 
         let static_data = ButtonStatic {
-            swf: source_movie.movie.clone(),
+            movie: source_movie.movie.clone(),
             id: button.id,
             records: button.records.clone(),
             actions,
@@ -122,7 +122,7 @@ impl<'gc> Avm2Button<'gc> {
     }
 
     pub fn empty_button(context: &mut UpdateContext<'_, 'gc, '_>) -> Self {
-        let movie = Arc::new(SwfMovie::empty(context.swf.version()));
+        let movie = Arc::new(SwfMovie::empty(context.movie.version()));
         let button_record = swf::Button {
             id: 0,
             is_track_as_menu: false,
@@ -396,7 +396,7 @@ impl<'gc> TDisplayObject<'gc> for Avm2Button<'gc> {
     impl_display_object!(base);
 
     fn source_movie(&self) -> Option<Arc<SwfMovie>> {
-        Some(self.0.read().static_data.read().swf.clone())
+        Some(self.0.read().static_data.read().movie.clone())
     }
 
     fn id(&self) -> CharacterId {
@@ -796,7 +796,7 @@ impl<'gc> Avm2ButtonData<'gc> {
     }
 
     fn movie(&self) -> Arc<SwfMovie> {
-        self.static_data.read().swf.clone()
+        self.static_data.read().movie.clone()
     }
 }
 
@@ -838,7 +838,7 @@ pub enum ButtonTracking {
 #[derive(Clone, Debug, Collect)]
 #[collect(require_static)]
 struct ButtonStatic {
-    swf: Arc<SwfMovie>,
+    movie: Arc<SwfMovie>,
     id: CharacterId,
     records: Vec<swf::ButtonRecord>,
     actions: Vec<ButtonAction>,

@@ -230,7 +230,7 @@ impl<'gc> EditText<'gc> {
                 static_data: gc_arena::Gc::allocate(
                     context.gc_context,
                     EditTextStatic {
-                        swf: swf_movie,
+                        movie: swf_movie,
                         text: EditTextStaticData {
                             id: swf_tag.id,
                             bounds: swf_tag.bounds,
@@ -745,7 +745,7 @@ impl<'gc> EditText<'gc> {
         let mut edit_text = self.0.write(context.gc_context);
         let autosize = edit_text.autosize;
         let is_word_wrap = edit_text.is_word_wrap;
-        let movie = edit_text.static_data.swf.clone();
+        let movie = edit_text.static_data.movie.clone();
         let width = edit_text.bounds.width() - Twips::from_pixels(Self::INTERNAL_PADDING * 2.0);
 
         if edit_text.is_password {
@@ -962,7 +962,7 @@ impl<'gc> EditText<'gc> {
             activation.run_with_child_frame_for_display_object(
                 "[Text Field Binding]",
                 parent,
-                activation.context.swf.version(),
+                activation.context.movie.version(),
                 |activation| {
                     if let Ok(Some((object, property))) =
                         activation.resolve_variable_path(parent, &variable)
@@ -1051,7 +1051,7 @@ impl<'gc> EditText<'gc> {
                     activation.run_with_child_frame_for_display_object(
                         "[Propagate Text Binding]",
                         self.avm1_parent().unwrap(),
-                        activation.context.swf.version(),
+                        activation.context.movie.version(),
                         |activation| {
                             let _ = object.set(
                                 property,
@@ -1202,7 +1202,7 @@ impl<'gc> EditText<'gc> {
 
             if changed {
                 let globals = context.avm1.global_object_cell();
-                let swf_version = context.swf.version();
+                let swf_version = context.movie.version();
                 let mut activation = Avm1Activation::from_nothing(
                     context.reborrow(),
                     ActivationIdentifier::root("[Propagate Text Binding]"),
@@ -1271,7 +1271,7 @@ impl<'gc> EditText<'gc> {
 
         Avm1::run_with_stack_frame_for_display_object(
             (*self).into(),
-            context.swf.version(),
+            context.movie.version(),
             context,
             |activation| {
                 // If this text field has a variable set, initialize text field binding.
@@ -1330,7 +1330,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
     }
 
     fn source_movie(&self) -> Option<Arc<SwfMovie>> {
-        Some(self.0.read().static_data.swf.clone())
+        Some(self.0.read().static_data.movie.clone())
     }
 
     /// Construct objects placed on this frame.
@@ -1695,7 +1695,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
 #[derive(Debug, Clone, Collect)]
 #[collect(no_drop)]
 struct EditTextStatic {
-    swf: Arc<SwfMovie>,
+    movie: Arc<SwfMovie>,
     text: EditTextStaticData,
 }
 #[derive(Debug, Clone, Collect)]

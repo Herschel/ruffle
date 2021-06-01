@@ -161,7 +161,7 @@ pub struct Player {
     ///   Player can be enabled by setting a particular player version.
     player_version: u8,
 
-    swf: Arc<SwfMovie>,
+    movie: Arc<SwfMovie>,
 
     warn_on_unsupported_content: bool,
 
@@ -248,7 +248,7 @@ impl Player {
         let mut player = Player {
             player_version: NEWEST_PLAYER_VERSION,
 
-            swf: fake_movie.clone(),
+            movie: fake_movie.clone(),
 
             warn_on_unsupported_content: true,
 
@@ -376,25 +376,25 @@ impl Player {
         );
 
         self.frame_rate = movie.frame_rate().into();
-        self.swf = movie;
+        self.movie = movie;
         self.instance_counter = 0;
 
         self.mutate_with_update_context(|context| {
             context
                 .stage
-                .set_movie(context.gc_context, context.swf.clone());
+                .set_movie(context.gc_context, context.movie.clone());
             let domain = Avm2Domain::movie_domain(context.gc_context, context.avm2.global_domain());
             let root: DisplayObject =
-                MovieClip::from_movie(context.gc_context, context.swf.clone()).into();
+                MovieClip::from_movie(context.gc_context, context.movie.clone()).into();
 
-            let library = context.library.library_for_movie_mut(context.swf.clone());
+            let library = context.library.library_for_movie_mut(context.movie.clone());
 
             library.set_avm2_domain(domain);
 
             root.set_depth(context.gc_context, 0);
-            let flashvars = if !context.swf.parameters().is_empty() {
+            let flashvars = if !context.movie.parameters().is_empty() {
                 let object = ScriptObject::object(context.gc_context, None);
-                for (key, value) in context.swf.parameters().iter() {
+                for (key, value) in context.movie.parameters().iter() {
                     object.define_value(
                         context.gc_context,
                         key,
@@ -624,7 +624,7 @@ impl Player {
         callback: Object<'gc>,
         context: &mut UpdateContext<'_, 'gc, '_>,
     ) {
-        let version = context.swf.version();
+        let version = context.movie.version();
         let globals = context.avm1.global_object_cell();
         let root_clip = context.stage.root_clip();
 
@@ -1054,7 +1054,7 @@ impl Player {
                 lib.register_character(id, crate::character::Character::MorphShape(morph_shape));
             }
         });
-        if self.swf.avm_type() == AvmType::Avm2 && self.warn_on_unsupported_content {
+        if self.movie.avm_type() == AvmType::Avm2 && self.warn_on_unsupported_content {
             self.ui.display_unsupported_message();
         }
     }
@@ -1163,7 +1163,7 @@ impl Player {
                     Avm1::run_stack_frame_for_action(
                         actions.clip,
                         "[Frame]",
-                        context.swf.version(),
+                        context.movie.version(),
                         bytecode,
                         context,
                     );
@@ -1173,7 +1173,7 @@ impl Player {
                     constructor: Some(constructor),
                     events,
                 } => {
-                    let version = context.swf.version();
+                    let version = context.movie.version();
                     let globals = context.avm1.global_object_cell();
 
                     let mut activation = Activation::from_nothing(
@@ -1190,7 +1190,7 @@ impl Player {
                                 let _ = activation.run_child_frame_for_action(
                                     "[Actions]",
                                     actions.clip,
-                                    activation.context.swf.version(),
+                                    activation.context.movie.version(),
                                     event,
                                 );
                             }
@@ -1208,7 +1208,7 @@ impl Player {
                         Avm1::run_stack_frame_for_action(
                             actions.clip,
                             "[Construct]",
-                            context.swf.version(),
+                            context.movie.version(),
                             event,
                             context,
                         );
@@ -1219,7 +1219,7 @@ impl Player {
                     Avm1::run_stack_frame_for_method(
                         actions.clip,
                         object,
-                        context.swf.version(),
+                        context.movie.version(),
                         context,
                         name,
                         &args,
@@ -1236,7 +1236,7 @@ impl Player {
                     // so this doesn't require any further execution.
                     Avm1::notify_system_listeners(
                         actions.clip,
-                        context.swf.version(),
+                        context.movie.version(),
                         context,
                         listener,
                         method,
@@ -1290,7 +1290,7 @@ impl Player {
             frame_rate,
         ) = (
             self.player_version,
-            &self.swf,
+            &self.movie,
             self.renderer.deref_mut(),
             self.audio.deref_mut(),
             self.navigator.deref_mut(),
@@ -1333,7 +1333,7 @@ impl Player {
 
             let mut update_context = UpdateContext {
                 player_version,
-                swf,
+                movie: swf,
                 library,
                 rng,
                 renderer,

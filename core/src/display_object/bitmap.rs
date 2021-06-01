@@ -43,7 +43,7 @@ impl<'gc> Bitmap<'gc> {
         Bitmap(GcCell::allocate(
             context.gc_context,
             BitmapData {
-                base: DisplayObjectBase::with_movie(context.swf.clone()),
+                base: DisplayObjectBase::with_movie(context.movie.clone()),
                 static_data: Gc::allocate(
                     context.gc_context,
                     BitmapStatic {

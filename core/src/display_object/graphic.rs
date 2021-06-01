@@ -90,7 +90,7 @@ impl<'gc> Graphic<'gc> {
         Graphic(GcCell::allocate(
             context.gc_context,
             GraphicData {
-                base: DisplayObjectBase::with_movie(context.swf.clone()),
+                base: DisplayObjectBase::with_movie(context.movie.clone()),
                 static_data: gc_arena::Gc::allocate(context.gc_context, static_data),
                 avm2_object: Some(avm2_object),
                 drawing: Some(drawing),

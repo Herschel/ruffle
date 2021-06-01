@@ -442,11 +442,11 @@ impl<'gc> Stage<'gc> {
     fn fire_resize_event(self, context: &mut UpdateContext<'_, 'gc, '_>) {
         // This event fires immediately when scaleMode is changed;
         // it doesn't queue up.
-        let library = context.library.library_for_movie_mut(context.swf.clone());
+        let library = context.library.library_for_movie_mut(context.movie.clone());
         if library.avm_type() == AvmType::Avm1 {
             crate::avm1::Avm1::notify_system_listeners(
                 self.root_clip(),
-                context.swf.version(),
+                context.movie.version(),
                 context,
                 "Stage",
                 "onResize",
