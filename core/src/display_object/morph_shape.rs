@@ -28,7 +28,7 @@ impl<'gc> MorphShape<'gc> {
         MorphShape(GcCell::allocate(
             gc_context,
             MorphShapeData {
-                base: Default::default(),
+                base: DisplayObjectBase::with_movie(static_data.movie.clone()),
                 static_data: Gc::allocate(gc_context, static_data),
                 ratio: 0,
             },

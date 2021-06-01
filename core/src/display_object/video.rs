@@ -97,7 +97,7 @@ impl<'gc> Video<'gc> {
         let source = GcCell::allocate(
             mc,
             VideoSource::Swf {
-                movie,
+                movie: movie.clone(),
                 streamdef,
                 frames: BTreeMap::new(),
             },
@@ -106,7 +106,7 @@ impl<'gc> Video<'gc> {
         Video(GcCell::allocate(
             mc,
             VideoData {
-                base: Default::default(),
+                base: DisplayObjectBase::with_movie(movie),
                 source,
                 stream: VideoStream::Uninstantiated(0),
                 decoded_frame: None,

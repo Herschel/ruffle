@@ -74,29 +74,22 @@ fn attach_sound<'gc>(
         let movie = sound_object
             .owner()
             .unwrap_or_else(|| activation.context.stage.root_clip())
-            .movie();
-        if let Some(movie) = movie {
-            if let Some(Character::Sound(sound)) = activation
-                .context
-                .library
-                .library_for_movie_mut(movie)
-                .character_by_export_name(&name)
-            {
-                sound_object.set_sound(activation.context.gc_context, Some(*sound));
-                sound_object.set_duration(
-                    activation.context.gc_context,
-                    activation.context.audio.get_sound_duration(*sound),
-                );
-                sound_object.set_position(activation.context.gc_context, 0);
-            } else {
-                avm_warn!(activation, "Sound.attachSound: Sound '{}' not found", name);
-            }
-        } else {
-            avm_warn!(
-                activation,
-                "Sound.attachSound: Cannot attach Sound '{}' without a library to reference",
-                name
+            .movie()
+            .clone();
+        if let Some(Character::Sound(sound)) = activation
+            .context
+            .library
+            .library_for_movie_mut(movie)
+            .character_by_export_name(&name)
+        {
+            sound_object.set_sound(activation.context.gc_context, Some(*sound));
+            sound_object.set_duration(
+                activation.context.gc_context,
+                activation.context.audio.get_sound_duration(*sound),
             );
+            sound_object.set_position(activation.context.gc_context, 0);
+        } else {
+            avm_warn!(activation, "Sound.attachSound: Sound '{}' not found", name);
         }
     } else {
         avm_warn!(activation, "Sound.attachSound: this is not a Sound");
@@ -418,25 +411,17 @@ fn stop<'gc>(
                 .owner()
                 .unwrap_or_else(|| activation.context.stage.root_clip())
                 .movie();
-            if let Some(movie) = movie {
-                if let Some(Character::Sound(sound)) = activation
-                    .context
-                    .library
-                    .library_for_movie_mut(movie)
-                    .character_by_export_name(&name)
-                {
-                    // Stop all sounds with the given name.
-                    let sound = *sound;
-                    activation.context.stop_sounds_with_handle(sound);
-                } else {
-                    avm_warn!(activation, "Sound.stop: Sound '{}' not found", name);
-                }
+            if let Some(Character::Sound(sound)) = activation
+                .context
+                .library
+                .library_for_movie_mut(movie.clone())
+                .character_by_export_name(&name)
+            {
+                // Stop all sounds with the given name.
+                let sound = *sound;
+                activation.context.stop_sounds_with_handle(sound);
             } else {
-                avm_warn!(
-                    activation,
-                    "Sound.stop: Cannot stop Sound '{}' without a library to reference",
-                    name
-                )
+                avm_warn!(activation, "Sound.stop: Sound '{}' not found", name);
             }
         } else if let Some(owner) = sound.owner() {
             // Usage 2: Stop all sound running within a given clip.

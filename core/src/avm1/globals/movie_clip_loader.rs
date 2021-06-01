@@ -112,19 +112,13 @@ pub fn get_progress<'gc>(
             ret_obj.define_value(
                 activation.context.gc_context,
                 "bytesLoaded",
-                movieclip
-                    .movie()
-                    .map(|mv| (mv.uncompressed_len()).into())
-                    .unwrap_or(Value::Undefined),
+                movieclip.movie().uncompressed_len().into(),
                 Attribute::empty(),
             );
             ret_obj.define_value(
                 activation.context.gc_context,
                 "bytesTotal",
-                movieclip
-                    .movie()
-                    .map(|mv| (mv.uncompressed_len()).into())
-                    .unwrap_or(Value::Undefined),
+                movieclip.movie().uncompressed_len().into(),
                 Attribute::empty(),
             );
 

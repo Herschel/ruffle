@@ -546,7 +546,7 @@ fn attach_movie<'gc>(
     if let Ok(new_clip) = activation
         .context
         .library
-        .library_for_movie(movie_clip.movie().unwrap())
+        .library_for_movie(movie_clip.movie().clone())
         .ok_or_else(|| "Movie is missing!".into())
         .and_then(|l| l.instantiate_by_export_name(&export_name, activation.context.gc_context))
     {
@@ -595,10 +595,7 @@ fn create_empty_movie_clip<'gc>(
     };
 
     // Create empty movie clip.
-    let swf_movie = movie_clip
-        .movie()
-        .or_else(|| activation.base_clip().movie())
-        .unwrap();
+    let swf_movie = movie_clip.movie().clone();
     let new_clip = MovieClip::new(SwfSlice::empty(swf_movie), activation.context.gc_context);
 
     // Set name and attach to parent.
@@ -620,7 +617,7 @@ fn create_text_field<'gc>(
     activation: &mut Activation<'_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let movie = activation.base_clip().movie().unwrap();
+    let movie = activation.base_clip().movie().clone();
     let instance_name = args.get(0).cloned().unwrap_or(Value::Undefined);
     let depth = args
         .get(1)
@@ -721,7 +718,7 @@ pub fn duplicate_movie_clip_with_bias<'gc>(
     if let Ok(new_clip) = activation
         .context
         .library
-        .library_for_movie(movie_clip.movie().unwrap())
+        .library_for_movie(movie_clip.movie().clone())
         .ok_or_else(|| "Movie is missing!".into())
         .and_then(|l| l.instantiate_by_id(movie_clip.id(), activation.context.gc_context))
     {
@@ -768,10 +765,7 @@ fn get_bytes_loaded<'gc>(
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let bytes_loaded = if movie_clip.is_root() {
-        movie_clip
-            .movie()
-            .map(|mv| mv.uncompressed_len())
-            .unwrap_or_default()
+        movie_clip.movie().uncompressed_len()
     } else {
         movie_clip.tag_stream_len() as u32
     };
@@ -786,10 +780,7 @@ fn get_bytes_total<'gc>(
     // For a loaded SWF, returns the uncompressed size of the SWF.
     // Otherwise, returns the size of the tag list in the clip's DefineSprite tag.
     let bytes_total = if movie_clip.is_root() {
-        movie_clip
-            .movie()
-            .map(|mv| mv.uncompressed_len())
-            .unwrap_or_default()
+        movie_clip.movie().uncompressed_len()
     } else {
         movie_clip.tag_stream_len() as u32
     };

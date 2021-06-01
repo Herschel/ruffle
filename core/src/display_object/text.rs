@@ -29,7 +29,7 @@ impl<'gc> Text<'gc> {
         Text(GcCell::allocate(
             context.gc_context,
             TextData {
-                base: Default::default(),
+                base: DisplayObjectBase::with_movie(swf.clone()),
                 static_data: gc_arena::Gc::allocate(
                     context.gc_context,
                     TextStatic {
@@ -59,10 +59,6 @@ impl<'gc> TDisplayObject<'gc> for Text<'gc> {
 
     fn id(&self) -> CharacterId {
         self.0.read().static_data.id
-    }
-
-    fn movie(&self) -> Option<Arc<SwfMovie>> {
-        Some(self.0.read().static_data.swf.clone())
     }
 
     fn run_frame(&self, _context: &mut UpdateContext) {
@@ -97,7 +93,7 @@ impl<'gc> TDisplayObject<'gc> for Text<'gc> {
             height = block.height.unwrap_or(height);
             if let Some(font) = context
                 .library
-                .library_for_movie(self.movie().unwrap())
+                .library_for_movie(self.movie())
                 .unwrap()
                 .get_font(font_id)
             {
@@ -158,7 +154,7 @@ impl<'gc> TDisplayObject<'gc> for Text<'gc> {
 
                 if let Some(font) = context
                     .library
-                    .library_for_movie(self.movie().unwrap())
+                    .library_for_movie(self.movie())
                     .unwrap()
                     .get_font(font_id)
                 {

@@ -14,12 +14,14 @@ use crate::display_object::container::{
 };
 use crate::display_object::{render_base, DisplayObject, DisplayObjectBase, TDisplayObject};
 use crate::prelude::*;
+use crate::tag_utils::SwfMovie;
 use crate::types::{Degrees, Percent};
 use crate::vminterface::{AvmType, Instantiator};
 use bitflags::bitflags;
 use gc_arena::{Collect, GcCell, MutationContext};
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
+use std::sync::Arc;
 
 /// The Stage is the root of the display object hierarchy. It contains all AVM1
 /// levels as well as AVM2 movies.
@@ -88,7 +90,7 @@ impl<'gc> Stage<'gc> {
         let stage = Self(GcCell::allocate(
             gc_context,
             StageData {
-                base: Default::default(),
+                base: DisplayObjectBase::with_movie(Arc::new(SwfMovie::empty(1))),
                 child: Default::default(),
                 background_color: None,
                 letterbox: Letterbox::Fullscreen,
@@ -136,8 +138,13 @@ impl<'gc> Stage<'gc> {
     }
 
     /// Set the size of the SWF file.
-    pub fn set_movie_size(self, gc_context: MutationContext<'gc, '_>, width: u32, height: u32) {
-        self.0.write(gc_context).movie_size = (width, height);
+    pub fn set_movie(self, gc_context: MutationContext<'gc, '_>, movie: Arc<SwfMovie>) {
+        let mut stage = self.0.write(gc_context);
+        stage.movie_size = (
+            movie.width().to_pixels() as u32,
+            movie.height().to_pixels() as u32,
+        );
+        stage.base.movie = movie;
     }
 
     /// Get the size of the stage.

@@ -46,13 +46,13 @@ impl<'gc> Graphic<'gc> {
                     .register_shape((&swf_shape).into(), library),
             ),
             shape: swf_shape,
-            movie: Some(movie),
+            movie: Some(movie.clone()),
         };
 
         Graphic(GcCell::allocate(
             context.gc_context,
             GraphicData {
-                base: Default::default(),
+                base: DisplayObjectBase::with_movie(movie),
                 static_data: gc_arena::Gc::allocate(context.gc_context, static_data),
                 avm2_object: None,
                 drawing: None,
@@ -90,7 +90,7 @@ impl<'gc> Graphic<'gc> {
         Graphic(GcCell::allocate(
             context.gc_context,
             GraphicData {
-                base: Default::default(),
+                base: DisplayObjectBase::with_movie(context.swf.clone()),
                 static_data: gc_arena::Gc::allocate(context.gc_context, static_data),
                 avm2_object: Some(avm2_object),
                 drawing: Some(drawing),
@@ -157,7 +157,7 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
         }
 
         if let Some(drawing) = &self.0.read().drawing {
-            drawing.render(context, self.0.read().static_data.movie.clone());
+            drawing.render(context, self.movie());
         } else if let Some(render_handle) = self.0.read().static_data.render_handle {
             context
                 .renderer
@@ -203,10 +203,6 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
         if run_frame {
             self.run_frame(context);
         }
-    }
-
-    fn movie(&self) -> Option<Arc<SwfMovie>> {
-        self.0.read().static_data.movie.clone()
     }
 
     fn object2(&self) -> Avm2Value<'gc> {

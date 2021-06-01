@@ -100,7 +100,7 @@ impl<'gc> Avm2Button<'gc> {
         Avm2Button(GcCell::allocate(
             context.gc_context,
             Avm2ButtonData {
-                base: Default::default(),
+                base: DisplayObjectBase::with_movie(source_movie.movie.clone()),
                 static_data: GcCell::allocate(context.gc_context, static_data),
                 state: self::ButtonState::Up,
                 hit_area: None,
@@ -177,9 +177,7 @@ impl<'gc> Avm2Button<'gc> {
         context: &mut UpdateContext<'_, 'gc, '_>,
         swf_state: swf::ButtonState,
     ) -> (DisplayObject<'gc>, bool) {
-        let movie = self
-            .movie()
-            .expect("All SWF-defined buttons should have movies");
+        let movie = self.movie();
         let empty_slice = SwfSlice::empty(movie.clone());
         let mut sprite_proto = context.avm2.prototypes().sprite;
         let mut activation = Avm2Activation::from_nothing(context.reborrow());
@@ -399,10 +397,6 @@ impl<'gc> TDisplayObject<'gc> for Avm2Button<'gc> {
 
     fn id(&self) -> CharacterId {
         self.0.read().static_data.read().id
-    }
-
-    fn movie(&self) -> Option<Arc<SwfMovie>> {
-        Some(self.0.read().static_data.read().swf.clone())
     }
 
     fn post_instantiation(

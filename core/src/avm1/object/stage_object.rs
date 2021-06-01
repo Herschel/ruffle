@@ -859,9 +859,8 @@ fn url<'gc>(
     this: DisplayObject<'gc>,
 ) -> Result<Value<'gc>, Error<'gc>> {
     Ok(this
-        .as_movie_clip()
-        .and_then(|mc| mc.movie())
-        .and_then(|mov| mov.url().map(|s| s.to_string()))
+        .movie()
+        .url()
         .map(|s| AvmString::new(activation.context.gc_context, s).into())
         .unwrap_or_else(|| "".into()))
 }

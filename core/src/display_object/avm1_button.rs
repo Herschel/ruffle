@@ -78,7 +78,7 @@ impl<'gc> Avm1Button<'gc> {
         Avm1Button(GcCell::allocate(
             gc_context,
             Avm1ButtonData {
-                base: Default::default(),
+                base: DisplayObjectBase::with_movie(source_movie.movie.clone()),
                 static_data: GcCell::allocate(gc_context, static_data),
                 container: ChildContainer::new(),
                 hit_area: BTreeMap::new(),
@@ -136,7 +136,7 @@ impl<'gc> Avm1Button<'gc> {
         let mut removed_depths: fnv::FnvHashSet<_> =
             self.iter_render_list().map(|o| o.depth()).collect();
 
-        let movie = self.movie().unwrap();
+        let movie = self.movie();
         let mut write = self.0.write(context.gc_context);
         write.state = state;
         let swf_state = match state {
@@ -237,10 +237,6 @@ impl<'gc> TDisplayObject<'gc> for Avm1Button<'gc> {
 
     fn id(&self) -> CharacterId {
         self.0.read().static_data.read().id
-    }
-
-    fn movie(&self) -> Option<Arc<SwfMovie>> {
-        Some(self.0.read().static_data.read().swf.clone())
     }
 
     fn post_instantiation(

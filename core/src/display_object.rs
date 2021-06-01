@@ -52,6 +52,7 @@ pub use video::Video;
 #[derive(Clone, Debug, Collect)]
 #[collect(no_drop)]
 pub struct DisplayObjectBase<'gc> {
+    movie: Arc<SwfMovie>,
     parent: Option<DisplayObject<'gc>>,
     place_frame: u16,
     depth: Depth,
@@ -90,9 +91,11 @@ pub struct DisplayObjectBase<'gc> {
     flags: DisplayObjectFlags,
 }
 
-impl<'gc> Default for DisplayObjectBase<'gc> {
-    fn default() -> Self {
+#[allow(dead_code)]
+impl<'gc> DisplayObjectBase<'gc> {
+    fn with_movie(movie: Arc<SwfMovie>) -> Self {
         Self {
+            movie,
             parent: Default::default(),
             place_frame: Default::default(),
             depth: Default::default(),
@@ -111,10 +114,7 @@ impl<'gc> Default for DisplayObjectBase<'gc> {
             flags: DisplayObjectFlags::VISIBLE,
         }
     }
-}
 
-#[allow(dead_code)]
-impl<'gc> DisplayObjectBase<'gc> {
     /// Reset all properties that would be adjusted by a movie load.
     fn reset_for_movie_load(&mut self) {
         let flags_to_keep = self.flags & DisplayObjectFlags::LOCK_ROOT;
@@ -418,8 +418,8 @@ impl<'gc> DisplayObjectBase<'gc> {
             .unwrap_or(NEWEST_PLAYER_VERSION)
     }
 
-    fn movie(&self) -> Option<Arc<SwfMovie>> {
-        self.parent.and_then(|p| p.movie())
+    fn movie(&self) -> Arc<SwfMovie> {
+        self.movie.clone()
     }
 
     fn masker(&self) -> Option<DisplayObject<'gc>> {
@@ -490,6 +490,10 @@ pub trait TDisplayObject<'gc>:
     'gc + Clone + Copy + Collect + Debug + Into<DisplayObject<'gc>>
 {
     fn id(&self) -> CharacterId;
+
+    /// The movie that created this DisplayObject.
+    fn movie(&self) -> Arc<SwfMovie>;
+
     fn depth(&self) -> Depth;
     fn set_depth(&self, gc_context: MutationContext<'gc, '_>, depth: Depth);
 
@@ -1056,7 +1060,7 @@ pub trait TDisplayObject<'gc>:
     fn apply_place_object(
         &self,
         context: &mut UpdateContext<'_, 'gc, '_>,
-        placing_movie: Option<Arc<SwfMovie>>,
+        placing_movie: Arc<SwfMovie>,
         place_object: &swf::PlaceObject,
     ) {
         // PlaceObject tags only apply if this object has not been dynamically moved by AS code.
@@ -1088,22 +1092,15 @@ pub trait TDisplayObject<'gc>:
             {
                 // Convert from `swf::ClipAction` to Ruffle's `ClipAction`.
                 use crate::display_object::movie_clip::ClipAction;
-                if let Some(placing_movie) = placing_movie {
-                    clip.set_clip_actions(
-                        context.gc_context,
-                        clip_actions
-                            .iter()
-                            .cloned()
-                            .map(|a| {
-                                ClipAction::from_action_and_movie(a, Arc::clone(&placing_movie))
-                            })
-                            .flatten()
-                            .collect(),
-                    );
-                } else {
-                    // This probably shouldn't happen; we should always have a movie.
-                    log::error!("No movie when trying to set clip event");
-                }
+                clip.set_clip_actions(
+                    context.gc_context,
+                    clip_actions
+                        .iter()
+                        .cloned()
+                        .map(|a| ClipAction::from_action_and_movie(a, Arc::clone(&placing_movie)))
+                        .flatten()
+                        .collect(),
+                );
             }
             if self.swf_version() >= 11 {
                 if let Some(visible) = place_object.is_visible {
@@ -1194,17 +1191,11 @@ pub trait TDisplayObject<'gc>:
             .unwrap_or(NEWEST_PLAYER_VERSION)
     }
 
-    /// Return the SWF that defines this display object.
-    fn movie(&self) -> Option<Arc<SwfMovie>> {
-        self.parent().and_then(|p| p.movie())
-    }
-
     /// Return the VM that this object belongs to.
     ///
     /// This function panics if the display object has no defining movie.
     fn avm_type(&self) -> AvmType {
-        let movie = self.movie().unwrap();
-        movie.avm_type()
+        self.movie().avm_type()
     }
 
     fn instantiate(&self, gc_context: MutationContext<'gc, '_>) -> DisplayObject<'gc>;
@@ -1369,6 +1360,9 @@ pub enum DisplayObjectPtr {}
 #[macro_export]
 macro_rules! impl_display_object_sansbounds {
     ($field:ident) => {
+        fn movie(&self) -> std::sync::Arc<crate::tag_utils::SwfMovie> {
+            self.0.read().$field.movie().clone()
+        }
         fn depth(&self) -> crate::prelude::Depth {
             self.0.read().$field.depth()
         }

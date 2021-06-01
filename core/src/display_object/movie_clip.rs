@@ -93,7 +93,7 @@ impl<'gc> MovieClip<'gc> {
         MovieClip(GcCell::allocate(
             gc_context,
             MovieClipData {
-                base: Default::default(),
+                base: DisplayObjectBase::with_movie(swf.movie.clone()),
                 static_data: Gc::allocate(gc_context, MovieClipStatic::empty(swf)),
                 tag_stream_pos: 0,
                 current_frame: 0,
@@ -125,7 +125,7 @@ impl<'gc> MovieClip<'gc> {
         MovieClip(GcCell::allocate(
             gc_context,
             MovieClipData {
-                base: Default::default(),
+                base: DisplayObjectBase::with_movie(swf.movie.clone()),
                 static_data: Gc::allocate(gc_context, MovieClipStatic::empty(swf)),
                 tag_stream_pos: 0,
                 current_frame: 0,
@@ -157,7 +157,7 @@ impl<'gc> MovieClip<'gc> {
         MovieClip(GcCell::allocate(
             gc_context,
             MovieClipData {
-                base: Default::default(),
+                base: DisplayObjectBase::with_movie(swf.movie.clone()),
                 static_data: Gc::allocate(
                     gc_context,
                     MovieClipStatic::with_data(id, swf, num_frames),
@@ -189,7 +189,7 @@ impl<'gc> MovieClip<'gc> {
         let mc = MovieClip(GcCell::allocate(
             gc_context,
             MovieClipData {
-                base: Default::default(),
+                base: DisplayObjectBase::with_movie(movie.clone()),
                 static_data: Gc::allocate(
                     gc_context,
                     MovieClipStatic::with_data(0, movie.into(), num_frames),
@@ -516,7 +516,6 @@ impl<'gc> MovieClip<'gc> {
         reader: &mut SwfStream<'_>,
         tag_len: usize,
     ) -> DecodeResult {
-        let movie = self.movie().unwrap();
         if self.avm_type() != AvmType::Avm2 {
             log::warn!("DoABC tag in AVM1 movie");
             return Ok(());
@@ -529,7 +528,10 @@ impl<'gc> MovieClip<'gc> {
         let flags = reader.read_u32()?;
         let name = reader.read_str()?.to_string_lossy(reader.encoding());
         let is_lazy_initialize = flags & 1 != 0;
-        let domain = context.library.library_for_movie_mut(movie).avm2_domain();
+        let domain = context
+            .library
+            .library_for_movie_mut(self.movie())
+            .avm2_domain();
 
         // The rest of the tag is an ABC file so we can take our SwfSlice now.
         let slice = self
@@ -558,9 +560,7 @@ impl<'gc> MovieClip<'gc> {
         context: &mut UpdateContext<'_, 'gc, '_>,
         reader: &mut SwfStream<'_>,
     ) -> DecodeResult {
-        let movie = self
-            .movie()
-            .ok_or("Attempted to set symbol classes on movie without any")?;
+        let movie = self.movie();
         let mut activation = Avm2Activation::from_nothing(context.reborrow());
 
         let num_symbols = reader.read_u16()?;
@@ -1104,7 +1104,7 @@ impl<'gc> MovieClip<'gc> {
     ) -> Option<DisplayObject<'gc>> {
         match context
             .library
-            .library_for_movie_mut(self.movie().unwrap()) //TODO
+            .library_for_movie_mut(self.movie()) //TODO
             .instantiate_by_id(id, context.gc_context)
         {
             Ok(child) => {
@@ -1668,12 +1668,8 @@ impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
         self.0.read().id()
     }
 
-    fn movie(&self) -> Option<Arc<SwfMovie>> {
-        Some(self.0.read().movie())
-    }
-
     fn swf_version(&self) -> u8 {
-        self.0.read().movie().version()
+        self.movie().version()
     }
 
     /// Construct objects placed on this frame.
@@ -2089,6 +2085,7 @@ impl<'gc> MovieClipData<'gc> {
         let total_frames = movie.num_frames();
 
         self.base.reset_for_movie_load();
+        self.base.movie = movie.clone();
         self.static_data = Gc::allocate(
             gc_context,
             MovieClipStatic::with_data(0, movie.into(), total_frames),
@@ -3224,7 +3221,7 @@ impl<'gc, 'a> MovieClip<'gc> {
         let start_sound = reader.read_start_sound_1()?;
         if let Some(handle) = context
             .library
-            .library_for_movie_mut(self.movie().unwrap()) // TODO
+            .library_for_movie_mut(self.movie()) // TODO
             .get_sound(start_sound.id)
         {
             use swf::SoundEvent;

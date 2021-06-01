@@ -380,11 +380,9 @@ impl Player {
         self.instance_counter = 0;
 
         self.mutate_with_update_context(|context| {
-            context.stage.set_movie_size(
-                context.gc_context,
-                context.swf.width().to_pixels() as u32,
-                context.swf.height().to_pixels() as u32,
-            );
+            context
+                .stage
+                .set_movie(context.gc_context, context.swf.clone());
             let domain = Avm2Domain::movie_domain(context.gc_context, context.avm2.global_domain());
             let root: DisplayObject =
                 MovieClip::from_movie(context.gc_context, context.swf.clone()).into();
@@ -1048,7 +1046,7 @@ impl Player {
 
             let lib = context
                 .library
-                .library_for_movie_mut(root.as_movie_clip().unwrap().movie().unwrap());
+                .library_for_movie_mut(root.as_movie_clip().unwrap().movie());
 
             // Finalize morph shapes.
             for (id, static_data) in morph_shapes {

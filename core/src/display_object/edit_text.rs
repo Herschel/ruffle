@@ -211,8 +211,7 @@ impl<'gc> EditText<'gc> {
         let border_color = 0; // Default is black
         let is_device_font = swf_tag.is_device_font;
 
-        let mut base = DisplayObjectBase::default();
-
+        let mut base = DisplayObjectBase::with_movie(swf_movie.clone());
         base.matrix_mut().tx = bounds.x_min;
         base.matrix_mut().ty = bounds.y_min;
 
@@ -930,8 +929,7 @@ impl<'gc> EditText<'gc> {
         }
 
         if let Some(drawing) = lbox.as_renderable_drawing() {
-            let movie = self.movie();
-            drawing.render(context, movie);
+            drawing.render(context, self.movie());
         }
 
         context.transform_stack.pop();
@@ -1331,10 +1329,6 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
         self.0.read().static_data.text.id
     }
 
-    fn movie(&self) -> Option<Arc<SwfMovie>> {
-        Some(self.0.read().static_data.swf.clone())
-    }
-
     /// Construct objects placed on this frame.
     fn construct_frame(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
         if self.avm_type() == AvmType::Avm2 && matches!(self.object2(), Avm2Value::Undefined) {
@@ -1373,11 +1367,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
         }
         drop(text);
 
-        let movie = self.movie().unwrap();
-        let library = context.library.library_for_movie_mut(movie);
-        let vm_type = library.avm_type();
-
-        if vm_type == AvmType::Avm1 {
+        if self.avm_type() == AvmType::Avm1 {
             self.construct_as_avm1_object(context, display_object, run_frame);
         }
     }

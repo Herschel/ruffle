@@ -1121,17 +1121,13 @@ pub fn load_bitmap<'gc>(
         .get(0)
         .unwrap_or(&Value::Undefined)
         .coerce_to_string(activation)?;
-
     let library = &*activation.context.library;
-
     let movie = activation.target_clip_or_root()?.movie();
-
-    let renderer = &mut activation.context.renderer;
-
-    let character = movie
-        .and_then(|m| library.library_for_movie(m))
+    let character = library
+        .library_for_movie(movie.clone())
         .and_then(|l| l.character_by_export_name(name.as_str()));
 
+    let renderer = &mut activation.context.renderer;
     if let Some(Character::Bitmap(bitmap_object)) = character {
         if let Some(bitmap) = renderer.get_bitmap_pixels(bitmap_object.bitmap_handle()) {
             let new_bitmap_data = BitmapDataObject::empty_object(

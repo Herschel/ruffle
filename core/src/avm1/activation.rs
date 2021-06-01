@@ -2846,7 +2846,7 @@ impl<'a, 'gc, 'gc_context> Activation<'a, 'gc, 'gc_context> {
             level
         } else {
             let level: DisplayObject<'_> = MovieClip::new(
-                SwfSlice::empty(self.base_clip().movie().unwrap()),
+                SwfSlice::empty(self.base_clip().movie().clone()),
                 self.context.gc_context,
             )
             .into();

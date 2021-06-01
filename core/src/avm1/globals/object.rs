@@ -173,10 +173,10 @@ pub fn register_class<'gc>(
     let class_name = class_name.coerce_to_string(activation)?;
 
     let registry = activation
-        .base_clip()
-        .movie()
-        .map(|movie| activation.context.library.library_for_movie_mut(movie))
-        .and_then(|library| library.avm1_constructor_registry());
+        .context
+        .library
+        .library_for_movie_mut(activation.base_clip().movie().clone())
+        .avm1_constructor_registry();
 
     match registry {
         Some(registry) => {

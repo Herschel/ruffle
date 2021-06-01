@@ -188,7 +188,7 @@ impl Drawing {
         self.dirty.set(true);
     }
 
-    pub fn render(&self, context: &mut RenderContext, movie: Option<Arc<SwfMovie>>) {
+    pub fn render(&self, context: &mut RenderContext, movie: Arc<SwfMovie>) {
         if self.dirty.get() {
             self.dirty.set(false);
             let mut paths = Vec::new();
@@ -231,8 +231,7 @@ impl Drawing {
                 edge_bounds: self.edge_bounds.clone(),
                 id: 0,
             };
-            let library = movie.and_then(|m| context.library.library_for_movie(m));
-
+            let library = context.library.library_for_movie(movie);
             if let Some(handle) = self.render_handle.get() {
                 context.renderer.replace_shape(shape, library, handle);
             } else {
