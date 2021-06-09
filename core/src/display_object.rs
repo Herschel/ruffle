@@ -53,7 +53,7 @@ pub use video::Video;
 #[collect(no_drop)]
 pub struct DisplayObjectBase<'gc> {
     parent: Option<DisplayObject<'gc>>,
-    place_frame: u16,
+    ratio: u16,
     depth: Depth,
     transform: Transform,
     name: String,
@@ -98,7 +98,7 @@ impl<'gc> Default for DisplayObjectBase<'gc> {
     fn default() -> Self {
         Self {
             parent: Default::default(),
-            place_frame: Default::default(),
+            ratio: Default::default(),
             depth: Default::default(),
             transform: Default::default(),
             name: Default::default(),
@@ -137,12 +137,12 @@ impl<'gc> DisplayObjectBase<'gc> {
         self.depth = depth;
     }
 
-    fn place_frame(&self) -> u16 {
-        self.place_frame
+    fn ratio(&self) -> u16 {
+        self.ratio
     }
 
-    fn set_place_frame(&mut self, frame: u16) {
-        self.place_frame = frame;
+    fn set_ratio(&mut self, ratio: u16) {
+        self.ratio = ratio;
     }
 
     fn transform(&self) -> &Transform {
@@ -538,8 +538,8 @@ pub trait TDisplayObject<'gc>:
         bounds
     }
 
-    fn place_frame(&self) -> u16;
-    fn set_place_frame(&self, gc_context: MutationContext<'gc, '_>, frame: u16);
+    fn ratio(&self) -> u16;
+    fn set_ratio(&self, gc_context: MutationContext<'gc, '_>, frame: u16);
 
     fn transform(&self) -> Ref<Transform>;
     fn matrix(&self) -> Ref<Matrix>;
@@ -1095,10 +1095,10 @@ pub trait TDisplayObject<'gc>:
                 self.set_clip_depth(context.gc_context, clip_depth.into());
             }
             if let Some(ratio) = place_object.ratio {
-                if let Some(mut morph_shape) = self.as_morph_shape() {
-                    morph_shape.set_ratio(context.gc_context, ratio);
-                } else if let Some(video) = self.as_video() {
+                if let Some(video) = self.as_video() {
                     video.seek(context, ratio.into());
+                } else {
+                    self.set_ratio(context.gc_context, ratio);
                 }
             }
             // Clip events only apply to movie clips.
@@ -1382,11 +1382,11 @@ macro_rules! impl_display_object_sansbounds {
         fn set_depth(&self, gc_context: gc_arena::MutationContext<'gc, '_>, depth: Depth) {
             self.0.write(gc_context).$field.set_depth(depth)
         }
-        fn place_frame(&self) -> u16 {
-            self.0.read().$field.place_frame()
+        fn ratio(&self) -> u16 {
+            self.0.read().$field.ratio()
         }
-        fn set_place_frame(&self, context: gc_arena::MutationContext<'gc, '_>, frame: u16) {
-            self.0.write(context).$field.set_place_frame(frame)
+        fn set_ratio(&self, context: gc_arena::MutationContext<'gc, '_>, ratio: u16) {
+            self.0.write(context).$field.set_ratio(ratio)
         }
         fn transform(&self) -> std::cell::Ref<crate::transform::Transform> {
             std::cell::Ref::map(self.0.read(), |o| o.$field.transform())

@@ -1119,13 +1119,6 @@ impl<'gc> MovieClip<'gc> {
                     child.set_instantiated_by_timeline(context.gc_context, true);
                     child.set_depth(context.gc_context, depth);
                     child.set_parent(context.gc_context, Some(self.into()));
-                    if child.avm_type() == AvmType::Avm2 {
-                        // In AVM2 instantiation happens before frame advance so we
-                        // have to special-case that
-                        child.set_place_frame(context.gc_context, self.current_frame() + 1);
-                    } else {
-                        child.set_place_frame(context.gc_context, self.current_frame());
-                    }
 
                     // Run first frame.
                     child.apply_place_object(context, self.movie(), place_object);
@@ -1204,7 +1197,7 @@ impl<'gc> MovieClip<'gc> {
 
             while let Some(child) = it.next() {
                 if !child.placed_by_script() {
-                    if child.place_frame() <= frame {
+                    if child.ratio() + 1 <= frame {
                         surviving_children.push((child.depth(), child));
                     } else {
                         self.remove_child(context, child, Lists::all());
@@ -2971,13 +2964,6 @@ impl<'gc, 'a> MovieClip<'gc> {
                 if let Some(child) = self.child_by_depth(place_object.depth.into()) {
                     child.replace_with(context, id);
                     child.apply_place_object(context, self.movie(), &place_object);
-                    if child.avm_type() == AvmType::Avm2 {
-                        // In AVM2 instantiation happens before frame advance so we
-                        // have to special-case that
-                        child.set_place_frame(context.gc_context, self.current_frame() + 1);
-                    } else {
-                        child.set_place_frame(context.gc_context, self.current_frame());
-                    }
                 }
             }
             PlaceObjectAction::Modify => {

@@ -423,7 +423,6 @@ macro_rules! impl_display_object_container {
             drop(write);
 
             child.set_parent(context.gc_context, Some(self.into()));
-            child.set_place_frame(context.gc_context, 0);
             child.set_depth(context.gc_context, depth);
 
             if let Some(removed_child) = removed_child {
@@ -478,10 +477,7 @@ macro_rules! impl_display_object_container {
             };
 
             let child_was_on_stage = child.is_on_stage(context);
-
-            child.set_place_frame(context.gc_context, 0);
             child.set_parent(context.gc_context, Some((*self).into()));
-
             self.0
                 .write(context.gc_context)
                 .$field
