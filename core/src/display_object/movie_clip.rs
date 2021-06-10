@@ -1186,28 +1186,35 @@ impl<'gc> MovieClip<'gc> {
 
         // If we are rewinding, we first clear the entire display list, but some children should
         // logically persist because they were created before the destination frame.
-        let mut surviving_children = SmallVec::<[_; 16]>::new();
+        let mut rewind_children = fnv::FnvHashMap::default();
+        let avm_type = self.avm_type();
         if frame < self.current_frame() {
             // Because we can only step forward, we have to start at frame 1
             // when rewinding.
             self.0.write(context.gc_context).tag_stream_pos = 0;
             self.0.write(context.gc_context).current_frame = 0;
 
-            let mut it = self.iter_execution_list();
-
-            while let Some(child) = it.next() {
-                if !child.placed_by_script() {
-                    if child.ratio() + 1 <= frame {
-                        surviving_children.push((child.depth(), child));
-                    } else {
-                        self.remove_child(context, child, Lists::all());
+            match avm_type {
+                AvmType::Avm1 => {
+                    for (depth, child) in self.iter_depth_list() {
+                        if child.depth() < crate::avm1::globals::display_object::AVM_DEPTH_BIAS {
+                            self.remove_child(context, child, Lists::all());
+                            rewind_children.insert(depth, child);
+                        }
+                    }
+                }
+                AvmType::Avm2 => {
+                    for (depth, child) in self.iter_depth_list() {
+                        if !child.placed_by_script() {
+                            self.remove_child(context, child, Lists::all());
+                            rewind_children.insert(depth, child);
+                        } else {
+                            self.remove_child(context, child, Lists::DEPTH);
+                        }
                     }
                 }
             }
-            true
-        } else {
-            false
-        };
+        }
 
         // Stop any playing audio stream because we are seeking to a different point in the timeline.
         // The stream will restart naturally if we are still playing after the goto.
@@ -1227,19 +1234,29 @@ impl<'gc> MovieClip<'gc> {
             self.run_frame_internal(context, true);
         }
 
-        if !is_implicit {
-            self.frame_constructed(context);
-        }
-
         if self.current_frame() + 1 == frame {
+            if avm_type == AvmType::Avm2 {
+                self.construct_frame(context);
+            }
             self.run_frame_internal(context, false);
         }
 
-        for (depth, child) in surviving_children {
-            self.replace_at_depth(context, child, depth);
+        for (depth, prev_child) in rewind_children {
+            let mut prev_child_survives = false;
+            if let Some(new_child) = self.child_by_depth(depth) {
+                if prev_child.ratio() == new_child.ratio() {
+                    prev_child_survives = true;
+                    self.replace_at_depth(context, prev_child, depth);
+                }
+            }
+            if !prev_child_survives && avm_type == AvmType::Avm2 {
+                prev_child.set_parent(context.gc_context, Some(self.into()));
+                crate::display_object::container::dispatch_removed_event(prev_child, context);
+            }
         }
 
         if !is_implicit {
+            self.frame_constructed(context);
             self.avm2_root(context)
                 .unwrap_or_else(|| self.into())
                 .run_frame_scripts(context);
