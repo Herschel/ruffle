@@ -15,8 +15,9 @@ use crate::avm1::activation::{Activation as Avm1Activation, ActivationIdentifier
 use crate::character::Character;
 use crate::context::{ActionType, RenderContext, UpdateContext};
 use crate::display_object::container::{
-    dispatch_added_event_only, dispatch_added_to_stage_event_only, dispatch_removed_event,
-    ChildContainer, TDisplayObjectContainer,
+    dispatch_added_event, dispatch_added_event_only, dispatch_added_to_stage_event_only,
+    dispatch_removed_event, dispatch_removed_from_stage_event, ChildContainer,
+    TDisplayObjectContainer,
 };
 use crate::display_object::{
     Avm1Button, Avm2Button, Bitmap, DisplayObjectBase, EditText, Graphic, MorphShapeStatic,
@@ -1052,23 +1053,23 @@ impl<'gc> MovieClip<'gc> {
         let data = mc.static_data.swf.clone();
         let mut reader = data.read_from(mc.tag_stream_pos);
         let mut has_stream_block = false;
+        let is_seeking = mc.flags.contains(MovieClipFlags::SEEKING);
         drop(mc);
 
         let vm_type = self.avm_type();
-
         use swf::TagCode;
         let tag_callback = |reader: &mut SwfStream<'_>, tag_code, tag_len| match tag_code {
             TagCode::DoAction if !display_actions_only => self.do_action(context, reader, tag_len),
-            TagCode::PlaceObject if display_actions_only || vm_type == AvmType::Avm1 => {
+            TagCode::PlaceObject if is_seeking || vm_type == AvmType::Avm1 => {
                 self.place_object(context, reader, tag_len, 1)
             }
-            TagCode::PlaceObject2 if display_actions_only || vm_type == AvmType::Avm1 => {
+            TagCode::PlaceObject2 if is_seeking || vm_type == AvmType::Avm1 => {
                 self.place_object(context, reader, tag_len, 2)
             }
-            TagCode::PlaceObject3 if display_actions_only || vm_type == AvmType::Avm1 => {
+            TagCode::PlaceObject3 if is_seeking || vm_type == AvmType::Avm1 => {
                 self.place_object(context, reader, tag_len, 3)
             }
-            TagCode::PlaceObject4 if display_actions_only || vm_type == AvmType::Avm1 => {
+            TagCode::PlaceObject4 if is_seeking || vm_type == AvmType::Avm1 => {
                 self.place_object(context, reader, tag_len, 4)
             }
             TagCode::RemoveObject => self.remove_object(context, reader, 1),
@@ -1122,7 +1123,9 @@ impl<'gc> MovieClip<'gc> {
 
                     // Run first frame.
                     child.apply_place_object(context, self.movie(), place_object);
-                    child.construct_frame(context);
+                    if !self.0.read().flags.contains(MovieClipFlags::SEEKING) {
+                        child.construct_frame(context);
+                    }
                     child.post_instantiation(context, child, None, Instantiator::Movie, false);
                     // In AVM1, children are added in `run_frame` so this is necessary.
                     // In AVM2 we add them in `construct_frame` so calling this causes
@@ -1132,10 +1135,12 @@ impl<'gc> MovieClip<'gc> {
                     }
                 }
 
-                dispatch_added_event_only(child, context);
-                dispatch_added_to_stage_event_only(child, context);
-                if let Some(prev_child) = prev_child {
-                    dispatch_removed_event(prev_child, context);
+                if self.allow_display_list_events() {
+                    dispatch_added_event_only(child, context);
+                    dispatch_added_to_stage_event_only(child, context);
+                    if let Some(prev_child) = prev_child {
+                        dispatch_removed_event(prev_child, context);
+                    }
                 }
 
                 if let Avm2Value::Object(mut p) = self.object2() {
@@ -1186,6 +1191,11 @@ impl<'gc> MovieClip<'gc> {
 
         // If we are rewinding, we first clear the entire display list, but some children should
         // logically persist because they were created before the destination frame.
+        self.0
+            .write(context.gc_context)
+            .flags
+            .insert(MovieClipFlags::SEEKING);
+
         let mut rewind_children = fnv::FnvHashMap::default();
         let avm_type = self.avm_type();
         if frame < self.current_frame() {
@@ -1235,32 +1245,61 @@ impl<'gc> MovieClip<'gc> {
         }
 
         if self.current_frame() + 1 == frame {
-            if avm_type == AvmType::Avm2 {
-                self.construct_frame(context);
-            }
             self.run_frame_internal(context, false);
         }
 
-        for (depth, prev_child) in rewind_children {
-            let mut prev_child_survives = false;
-            if let Some(new_child) = self.child_by_depth(depth) {
-                if prev_child.ratio() == new_child.ratio() {
-                    prev_child_survives = true;
-                    self.replace_at_depth(context, prev_child, depth);
+        // Re-enable display list events.
+        self.0
+            .write(context.gc_context)
+            .flags
+            .remove(MovieClipFlags::SEEKING);
+
+        match avm_type {
+            AvmType::Avm1 => {
+                for (depth, prev_child) in rewind_children {
+                    if let Some(new_child) = self.child_by_depth(depth) {
+                        if prev_child.ratio() == new_child.ratio() {
+                            self.replace_at_depth(context, prev_child, depth);
+                        }
+                    }
                 }
             }
-            if !prev_child_survives && avm_type == AvmType::Avm2 {
-                prev_child.set_parent(context.gc_context, Some(self.into()));
-                crate::display_object::container::dispatch_removed_event(prev_child, context);
-            }
-        }
+            AvmType::Avm2 => {
+                let is_on_stage = self.is_on_stage(context);
 
-        if !is_implicit {
-            self.frame_constructed(context);
-            self.avm2_root(context)
-                .unwrap_or_else(|| self.into())
-                .run_frame_scripts(context);
-            self.exit_frame(context);
+                let mut surviving_depths = fnv::FnvHashSet::default();
+                for (depth, prev_child) in rewind_children {
+                    if let Some(new_child) = self.child_by_depth(depth) {
+                        if prev_child.ratio() == new_child.ratio() {
+                            self.replace_at_depth(context, prev_child, depth);
+                            surviving_depths.insert(depth);
+                            continue;
+                        }
+                    }
+                    prev_child.set_parent(context.gc_context, Some(self.into()));
+                    dispatch_removed_event(prev_child, context);
+                    if is_on_stage {
+                        dispatch_removed_from_stage_event(prev_child, context);
+                    }
+                    prev_child.set_parent(context.gc_context, None);
+                }
+
+                for (depth, new_child) in self.iter_depth_list() {
+                    if !surviving_depths.contains(&depth) {
+                        new_child.construct_frame(context);
+                        new_child.run_frame(context);
+                        dispatch_added_event(self.into(), new_child, false, context);
+                    }
+                }
+
+                if !is_implicit {
+                    self.frame_constructed(context);
+                    self.avm2_root(context)
+                        .unwrap_or_else(|| self.into())
+                        .run_frame_scripts(context);
+                    self.exit_frame(context);
+                }
+            }
         }
     }
 
@@ -1581,7 +1620,9 @@ impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
                 false
             };
 
-            if self.determine_next_frame() != NextFrame::First {
+            if (self.playing() || self.0.read().flags.contains(MovieClipFlags::SEEKING))
+                && self.determine_next_frame() != NextFrame::First
+            {
                 let mc = self.0.read();
                 let data = mc.static_data.swf.clone();
                 let mut reader = data.read_from(mc.tag_stream_pos);
@@ -1952,6 +1993,10 @@ impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
 
 impl<'gc> TDisplayObjectContainer<'gc> for MovieClip<'gc> {
     impl_display_object_container!(container);
+
+    fn allow_display_list_events(&self) -> bool {
+        !self.0.read().flags.contains(MovieClipFlags::SEEKING)
+    }
 }
 
 impl<'gc> MovieClipData<'gc> {
@@ -3185,6 +3230,12 @@ bitflags! {
         /// The AS3 `isPlaying` property is broken and yields false until you first
         /// call `play` to unbreak it. This flag tracks that bug.
         const PROGRAMMATICALLY_PLAYED = 1 << 2;
+
+        /// Whether this `MovieClip` has been played as a result of an AS3 command.
+        ///
+        /// The AS3 `isPlaying` property is broken and yields false until you first
+        /// call `play` to unbreak it. This flag tracks that bug.
+        const SEEKING = 1 << 3;
     }
 }
 

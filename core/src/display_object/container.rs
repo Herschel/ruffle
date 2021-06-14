@@ -345,6 +345,10 @@ pub trait TDisplayObjectContainer<'gc>:
             context.renderer.pop_mask();
         }
     }
+
+    fn allow_display_list_events(&self) -> bool {
+        true
+    }
 }
 
 #[macro_export]
@@ -483,7 +487,7 @@ macro_rules! impl_display_object_container {
                 .$field
                 .insert_at_id(child, index);
 
-            if parent_changed {
+            if parent_changed && self.allow_display_list_events() {
                 dispatch_added_event(
                     DisplayObject::from(*self),
                     child,
@@ -517,7 +521,9 @@ macro_rules! impl_display_object_container {
             ));
 
             use crate::display_object::container::dispatch_removed_event;
-            dispatch_removed_event(child, context);
+            if self.allow_display_list_events() {
+                dispatch_removed_event(child, context);
+            }
 
             let mut write = self.0.write(context.gc_context);
 
@@ -557,8 +563,10 @@ macro_rules! impl_display_object_container {
                 .collect();
 
             use crate::display_object::container::dispatch_removed_event;
-            for removed in removed_list.iter() {
-                dispatch_removed_event(*removed, context);
+            if self.allow_display_list_events() {
+                for removed in removed_list.iter() {
+                    dispatch_removed_event(*removed, context);
+                }
             }
 
             let mut write = self.0.write(context.gc_context);
@@ -581,10 +589,12 @@ macro_rules! impl_display_object_container {
 
         fn clear(&mut self, context: &mut UpdateContext<'_, 'gc, '_>) {
             use crate::display_object::container::dispatch_removed_event;
-            let removed_children: Vec<DisplayObject<'gc>> =
-                self.0.read().$field.iter_render_list().collect();
-            for removed in removed_children {
-                dispatch_removed_event(removed, context);
+            if self.allow_display_list_events() {
+                let removed_children: Vec<DisplayObject<'gc>> =
+                    self.0.read().$field.iter_render_list().collect();
+                for removed in removed_children {
+                    dispatch_removed_event(removed, context);
+                }
             }
 
             self.0.write(context.gc_context).$field.clear()
